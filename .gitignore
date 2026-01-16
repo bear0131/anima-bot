@@ -1,0 +1,58 @@
+# Virtual environments
+
+venv/
+.env
+.venv/
+env/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Coverage and test reports
+
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.pyre/
+
+# IDE / Editors
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.ipynb_checkpoints/
+
+
+# Node.js
+
+node_modules/
+*/node_modules/
+
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# OS
+
+.DS_Store
+
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+.*.swp
+.*.swo
+
+*.log
+*.tmp
+temp/
+tmp/
