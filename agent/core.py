@@ -41,19 +41,14 @@ class Agent:
             self.event_queue.task_done()
 
     async def execute_decision(self, decision):
-        """
-        这里就是 Executor 的雏形
-        """
         print(f"[Exec] Doing: {decision}")
         
         if decision['type'] == 'talk':
-            # 组装协议
             payload = {
                 "target": "minecraft",
                 "type": "chat",
                 "payload": decision['content']
             }
-            # 发送
             await server.send_packet(payload)
             
         elif decision['type'] == 'run_code':
