@@ -25,18 +25,17 @@ class ChatCapability:
         is_exclusive = can_process
         return can_process, is_exclusive
 
-    async def run(self, event: IncomingEvent) -> dict:
+    async def run(self, event: IncomingEvent, context: list) -> dict:
+        context.append({"role": "user", "content": event.content})
         response = await self.client.chat.completions.create(
             model=self.model_name,
-            messages=[
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": event.content},
-            ],
+            messages=[{"role": "system", "content": self.system_prompt}]+context,
             temperature=0.8,
             max_tokens=500,
         )
 
         content = response.choices[0].message.content
+        context.append({"role": "assistant", "content": content})
 
         return {
             "type": "talk",

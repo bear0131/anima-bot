@@ -18,7 +18,7 @@ class Brain:
             return result
         return None
 
-    async def think_stream(self, event: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def think_stream(self, event: Dict[str, Any], context: list) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式处理事件，按完成顺序产出结果。
         """
@@ -37,13 +37,13 @@ class Brain:
 
         if has_exclusive:
             exclusive_cap = next(cap for cap, exclusive in active_caps if exclusive)
-            result = await exclusive_cap.run(event)
+            result = await exclusive_cap.run(event, context)
             yield result
             return
 
         tasks = {}
         for cap, _ in active_caps:
-            task = asyncio.create_task(cap.run(event))
+            task = asyncio.create_task(cap.run(event, context))
             tasks[task] = cap
 
         for finished_task in asyncio.as_completed(tasks.keys()):

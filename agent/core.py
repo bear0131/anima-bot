@@ -13,6 +13,8 @@ class Agent:
         # 把队列挂载到 Server 模块上
         server.set_queue(self.event_queue)
         
+        self.context = []
+
         # 2. 初始化大脑
         self.brain = Brain()
         
@@ -34,7 +36,7 @@ class Agent:
             
             print(f"[Core] Received: {event}")
             
-            async for decision in self.brain.think_stream(event):
+            async for decision in self.brain.think_stream(event, self.context):
                 print(f"[Core] Got decision: {decision}")
                 await self.execute_decision(decision)
             
