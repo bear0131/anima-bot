@@ -4,6 +4,23 @@ const WebSocket = require('ws');
 const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const puppeteer = require('puppeteer')
 
+// 解析命令行参数
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const parsed = {};
+    for (const arg of args) {
+        if (arg.startsWith('--')) {
+            const [key, value] = arg.slice(2).split('=');
+            parsed[key] = value === undefined ? 'true' : value;
+        }
+    }
+    return parsed;
+}
+
+const argv = parseArgs();
+// headless 参数：默认为 true，如果传入 --headless=false 则设为 false
+const headlessMode = argv.headless !== 'false';
+
 // --- 依赖引入 ---
 // 这里的 require 只是为了让 node 知道我们要用这些包
 // 真正给 eval 用的变量要在 message 回调里定义
@@ -59,7 +76,7 @@ bot.once('spawn', async () => {
 
     try {
         // 3. 启动 Puppeteer
-        browser = await puppeteer.launch({ headless: false });
+        browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
         page = await browser.newPage();
 
         // 设置视口大小

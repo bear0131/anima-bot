@@ -43,6 +43,7 @@ cd ..
 ```
 > canvas 是一个 需要编译原生 C++ 代码 的模块，依赖系统级库。你可以安装 Visual Studio 的 “使用 C++ 的桌面开发” 工作负载。
 > puppeteer 需要下载 Chromium，你可以设置一个国内镜像 $env:PUPPETEER_DOWNLOAD_HOST="https://npmmirror.com/mirrors/puppeteer"。但这个也挺慢的，我硬等了半个小时。
+> 详见 https://www.qianwen.com/share/chat/5334d92a408342a88a94cb920d4a69ff。
 
 ## Configuration
 
@@ -78,6 +79,8 @@ python -m agent.core
 ```bash
 node mineflayer/index.js
 ```
+
+> 使用 `node mineflayer/index.js --headless=false` 来启动调试显示 bot 看到的截图。
 
 ## Project Structure
 
