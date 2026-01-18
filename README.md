@@ -75,8 +75,7 @@ python -m agent.core
 
 **Terminal 2 - Start the Minecraft bot:**
 ```bash
-cd mineflayer
-node index.js
+node mineflayer/index.js
 ```
 
 ## Project Structure

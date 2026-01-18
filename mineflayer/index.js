@@ -1,6 +1,8 @@
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const WebSocket = require('ws');
+const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
+const puppeteer = require('puppeteer')
 
 // --- 依赖引入 ---
 // 这里的 require 只是为了让 node 知道我们要用这些包
@@ -41,14 +43,66 @@ let isBotReady = false;
 
 const ws = new WebSocket('ws://localhost:8000/ws/minecraft');
 
+let browser = null
+let page = null
+
 ws.on('open', () => {
     console.log('Connected to Brain!');
 });
 
-bot.once('spawn', () => {
+bot.once('spawn', async () => {
     console.log('Bot Spawned.');
 
-    // 初始化逻辑（需要 version 信息，所以必须在 spawn 后）
+    // 启动 Viewer (Web服务器)
+    mineflayerViewer(bot, { port: 3007, firstPerson: true });
+    console.log('Viewer started on port 3007');
+
+    try {
+        // 3. 启动 Puppeteer
+        browser = await puppeteer.launch({ headless: false });
+        page = await browser.newPage();
+
+        // 设置视口大小
+        await page.setViewport({ width: 640, height: 480 });
+
+        // 访问 Viewer 页面
+        await page.goto('http://localhost:3007');
+
+        // 等待页面加载
+        await new Promise(r => setTimeout(r, 2000));
+
+        console.log('Ready to take screenshots!');
+    } catch (err) {
+        console.error('Failed to start screenshot server.', err);
+    }
+
+    // 传截图，每秒传一张
+    // 定义一个标志位，防止上一张还没传完下一张就开始，导致堆积
+    let isSnapshotting = false;
+
+    setInterval(async () => {
+        // 如果没有连接，或者正在截图中，或者页面没准备好，就跳过
+        if (ws.readyState !== WebSocket.OPEN || isSnapshotting || !page) return;
+
+        isSnapshotting = true;
+        try {
+            // 这里的 encoding: 'base64' 拿到的是纯字符
+            const base64Data = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 });
+            // 提示：用 jpeg + quality 50 可以大幅减少体积，降低延迟，对 AI 识别影响很小
+
+            ws.send(JSON.stringify({
+                source: 'minecraft',
+                type: 'frame',        // <--- 新类型：帧
+                content: base64Data,
+                metadata: { user: 'system' }  // 👈 放进 metadata
+            }));
+        } catch (e) {
+            console.error('Snapshot error:', e);
+        } finally {
+            isSnapshotting = false;
+        }
+    }, 1000); // 1000ms = 1秒
+
     const mcData = require("minecraft-data")(bot.version);
     const movements = new Movements(bot, mcData);
     bot.pathfinder.setMovements(movements);
@@ -65,6 +119,15 @@ bot.once('spawn', () => {
     isBotReady = true;
     console.log('>>> Bot is ready for commands! <<<');
 });
+
+async function getGameScreenshot() {
+    if (!page) return null;
+
+    // 截图并获取 Base64 字符串 (多模态模型通常需要 Base64)
+    // 格式通常是: "data:image/png;base64,....."
+    const screenshotBuffer = await page.screenshot({ encoding: 'base64' });
+    return screenshotBuffer;
+}
 
 // --- 核心逻辑 ---
 ws.on('message', async (data) => {
@@ -87,11 +150,9 @@ ws.on('message', async (data) => {
     else if (command.type === 'run_code') {
         console.log("Executing code...");
 
-        // ============================================================
-        //  CONTEXT RECONSTRUCTION (重建 Voyager 上下文环境)
-        // ============================================================
+        //  Context reconstruction
 
-        // 1. 准备 mcData 并打补丁 (Voyager 里的黑魔法，必须保留)
+        // 1. 准备 mcData 并打补丁
         const mcData = require("minecraft-data")(bot.version);
         mcData.itemsByName["leather_cap"] = mcData.itemsByName["leather_helmet"];
         mcData.itemsByName["leather_tunic"] = mcData.itemsByName["leather_chestplate"];
@@ -115,7 +176,7 @@ ws.on('message', async (data) => {
         const movements = new Movements(bot, mcData);
         bot.pathfinder.setMovements(movements);
 
-        // 4. Stuck Detection (防卡死机制) - 从 Voyager 移植
+        // 4. Stuck Detection (防卡死机制)
         bot.globalTickCounter = 0;
         bot.stuckTickCounter = 0;
         bot.stuckPosList = [];
@@ -133,7 +194,6 @@ ws.on('message', async (data) => {
             }
         }
 
-        // bot.on("physicTick", onTick); // 开启监听
         bot.on("physicsTick", onTick);
 
         // 5. 初始化失败计数器 (Primitive 代码里会用到)
@@ -180,7 +240,6 @@ ws.on('message', async (data) => {
             }));
         } finally {
             // 清理监听器，防止内存泄漏或逻辑冲突
-            // bot.removeListener("physicTick", onTick);
             bot.removeListener("physicsTick", onTick);
         }
     }
@@ -190,7 +249,7 @@ ws.on('message', async (data) => {
 bot.on('chat', (username, message) => {
     if (username === bot.username) return;
     if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ source: 'minecraft', type: 'chat', content: message, user: username }));
+        ws.send(JSON.stringify({ source: 'minecraft', type: 'chat', content: message, metadata: { user: username } }));
     }
 });
 

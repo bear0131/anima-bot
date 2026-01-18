@@ -1,5 +1,6 @@
 import asyncio
-from typing import Dict, Any, AsyncGenerator
+from typing import Optional, Dict, Any, AsyncGenerator
+from interfaces.protocol import IncomingEvent
 
 from agent.capabilities.chat_capability import ChatCapability
 
@@ -10,7 +11,7 @@ class Brain:
             ChatCapability(),
         ]
 
-    async def think(self, event: Dict[str, Any]) -> Dict[str, Any] | None:
+    async def think(self, event: IncomingEvent) -> Dict[str, Any] | None:
         """
         处理事件并返回第一个决策。
         """
@@ -18,7 +19,7 @@ class Brain:
             return result
         return None
 
-    async def think_stream(self, event: Dict[str, Any], context: list) -> AsyncGenerator[Dict[str, Any], None]:
+    async def think_stream(self, event: IncomingEvent, context: list, current_frame: Optional[str]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式处理事件，按完成顺序产出结果。
         """
@@ -37,13 +38,13 @@ class Brain:
 
         if has_exclusive:
             exclusive_cap = next(cap for cap, exclusive in active_caps if exclusive)
-            result = await exclusive_cap.run(event, context)
+            result = await exclusive_cap.run(event, context, current_frame)
             yield result
             return
 
         tasks = {}
         for cap, _ in active_caps:
-            task = asyncio.create_task(cap.run(event, context))
+            task = asyncio.create_task(cap.run(event, context, current_frame))
             tasks[task] = cap
 
         for finished_task in asyncio.as_completed(tasks.keys()):

@@ -12,7 +12,9 @@ class Agent:
         self.event_queue = asyncio.Queue()
         # 把队列挂载到 Server 模块上
         server.set_queue(self.event_queue)
-        
+
+        self.latest_visual_frame = None 
+
         self.context = []
 
         # 2. 初始化大脑
@@ -34,11 +36,14 @@ class Agent:
         while True:
             event = await self.event_queue.get()
             
-            print(f"[Core] Received: {event}")
-            
-            async for decision in self.brain.think_stream(event, self.context):
-                print(f"[Core] Got decision: {decision}")
-                await self.execute_decision(decision)
+            print(f"[Core] Received: {event.type}")
+
+            if event.type == 'frame':
+                self.latest_visual_frame = event.content
+            else:
+                async for decision in self.brain.think_stream(event, self.context, self.latest_visual_frame):
+                    print(f"[Core] Got decision: {decision}")
+                    await self.execute_decision(decision)
             
             self.event_queue.task_done()
 
