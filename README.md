@@ -41,27 +41,28 @@ cd mineflayer
 npm install
 cd ..
 ```
-
-4. Configure environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
+> canvas 是一个 需要编译原生 C++ 代码 的模块，依赖系统级库。你可以安装 Visual Studio 的 “使用 C++ 的桌面开发” 工作负载。
+> puppeteer 需要下载 Chromium，你可以设置一个国内镜像 $env:PUPPETEER_DOWNLOAD_HOST="https://npmmirror.com/mirrors/puppeteer"。但这个也挺慢的，我硬等了半个小时。
 
 ## Configuration
 
 Edit `.env` file:
 
 ```bash
-# Minecraft server connection
 MINECRAFT_HOST=localhost
 MINECRAFT_PORT=25565
 BOT_USERNAME=animabot
 
-# LLM API (OpenAI-compatible)
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1/
-OPENAI_MODEL_NAME=gpt-4
+# LLM Configuration
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://llmapi.paratera.com/v1/
+
+CHAT_MODEL_NAME=Qwen3-VL-30B-A3B-Instruct
+# Qwen3-VL-235B-A22B-Instruct 这个更高级，但先用便宜的
+CODE_MODEL_NAME=Qwen3-Coder-Plus
+
+# Prompt Paths
+PROMPT_PATH=agent/prompts
 ```
 
 ## Running
