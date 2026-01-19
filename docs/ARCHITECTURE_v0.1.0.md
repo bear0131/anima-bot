@@ -138,7 +138,7 @@ graph TD
     *   `ChatInterface` (P50) -> 发现是指令而非闲聊，忽略（或转交）。
     *   `TaskSolver` (P10) -> `can_handle` 返回 True。
     *   `TaskSolver` 调用 LLM，生成规划，检索技能，生成 JS 代码。
-    *   返回 Decision: `{ "type": "run_code", "code": "bot.findBlock(iron)..." }`。
+    *   返回 Decision: `{ "type": "code_run_request", "code": "bot.findBlock(iron)..." }`。
 4.  **Execution**:
     *   `Executor` 记录日志：“开始挖铁任务”。
     *   通过 WS 发送代码给 Node。

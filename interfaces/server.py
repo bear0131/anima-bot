@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from interfaces.protocol import IncomingEvent
+from agent.schema import Event
 import asyncio
 import json
 
@@ -33,9 +34,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # 1. 接收原始 JSON
             data = await websocket.receive_json()
             # 2. 校验并放入队列
-            event = IncomingEvent(**data) 
+            incoming_event = IncomingEvent(**data) 
             if global_event_queue:
-                await global_event_queue.put(event)
+                await global_event_queue.put(incoming_event)
     except WebSocketDisconnect:
         print("[Server] Node.js disconnected.")
         active_socket = None

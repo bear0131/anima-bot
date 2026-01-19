@@ -93,33 +93,6 @@ bot.once('spawn', async () => {
         console.error('Failed to start screenshot server.', err);
     }
 
-    // 传截图，每秒传一张
-    // 定义一个标志位，防止上一张还没传完下一张就开始，导致堆积
-    let isSnapshotting = false;
-
-    setInterval(async () => {
-        // 如果没有连接，或者正在截图中，或者页面没准备好，就跳过
-        if (ws.readyState !== WebSocket.OPEN || isSnapshotting || !page) return;
-
-        isSnapshotting = true;
-        try {
-            // 这里的 encoding: 'base64' 拿到的是纯字符
-            const base64Data = await page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 });
-            // 提示：用 jpeg + quality 50 可以大幅减少体积，降低延迟，对 AI 识别影响很小
-
-            ws.send(JSON.stringify({
-                source: 'minecraft',
-                type: 'frame',        // <--- 新类型：帧
-                content: base64Data,
-                metadata: { user: 'system' }  // 👈 放进 metadata
-            }));
-        } catch (e) {
-            console.error('Snapshot error:', e);
-        } finally {
-            isSnapshotting = false;
-        }
-    }, 1000); // 1000ms = 1秒
-
     const mcData = require("minecraft-data")(bot.version);
     const movements = new Movements(bot, mcData);
     bot.pathfinder.setMovements(movements);
@@ -135,6 +108,52 @@ bot.once('spawn', async () => {
     // 解锁
     isBotReady = true;
     console.log('>>> Bot is ready for commands! <<<');
+
+    // 传当前状态
+
+    // 定义一个标志位，防止上一张图片还没传完下一张就开始，导致堆积
+    let isSnapshotting = false;
+
+    setInterval(async () => {
+        let snapshotPromise = Promise.resolve();
+
+        // 如果可以截图，则执行截图操作
+        if (ws.readyState == WebSocket.OPEN && !isSnapshotting && page) {
+            isSnapshotting = true;
+            snapshotPromise = page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 })
+                .then(base64Data => {
+                    ws.send(JSON.stringify({
+                        source: 'minecraft',
+                        type: 'screenshot',
+                        content: base64Data,
+                        metadata: { user: 'system' }
+                    }));
+                })
+                .catch(e => console.error('Snapshot error:', e))
+                .finally(() => isSnapshotting = false);
+        }
+
+        // 发送文字状态信息
+        snapshotPromise.then(() => {
+            try {
+                const state = bot.observe();
+                ws.send(JSON.stringify({
+                    source: 'minecraft',
+                    type: 'observation',
+                    content: state,  // JSON 字符串
+                    metadata: {}
+                }));
+            } catch (e) {
+                console.error("Observation error:", e);
+                ws.send(JSON.stringify({
+                    source: 'minecraft',
+                    type: 'observation',
+                    content: null,
+                    metadata: { error: e.message }
+                }));
+            }
+        });
+    }, 1000); // 1000ms = 1秒
 });
 
 async function getGameScreenshot() {
@@ -163,8 +182,7 @@ ws.on('message', async (data) => {
 
     if (command.type === 'chat') {
         bot.chat(command.payload);
-    }
-    else if (command.type === 'run_code') {
+    } else if (command.type === 'code_run_request') {
         console.log("Executing code...");
 
         //  Context reconstruction

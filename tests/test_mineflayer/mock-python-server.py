@@ -140,7 +140,7 @@ class AnimaBotTestServer:
 
         command = {
             "target": "minecraft",
-            "type": "run_code",
+            "type": "code_run_request",
             "payload": code
         }
         await self.websocket.send_json(command)

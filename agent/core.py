@@ -2,7 +2,10 @@ import asyncio
 from dotenv import load_dotenv
 import uvicorn
 from interfaces import server
+from interfaces.protocol import IncomingEvent, OutgoingCommand
 from agent.brain import Brain
+from agent.schema import Event, AgentState
+from agent.short_memory import ShortTermMemory
 
 load_dotenv()
 
@@ -13,11 +16,8 @@ class Agent:
         # 把队列挂载到 Server 模块上
         server.set_queue(self.event_queue)
 
-        self.latest_visual_frame = None 
-
-        self.context = []
-
-        # 2. 初始化大脑
+        self.agent_state = AgentState()
+        self.memory = ShortTermMemory(self.agent_state)
         self.brain = Brain()
         
     async def start(self):
@@ -34,37 +34,57 @@ class Agent:
 
     async def main_loop(self):
         while True:
-            event = await self.event_queue.get()
-            
-            print(f"[Core] Received: {event.type}")
+            incoming_event = await self.event_queue.get()
 
-            if event.type == 'frame':
-                self.latest_visual_frame = event.content
-            else:
-                async for decision in self.brain.think_stream(event, self.context, self.latest_visual_frame):
+            print(f"[Core] Received: {incoming_event.type}")
+
+            # 转换 IncomingEvent -> Event
+            event = Event(
+                type=incoming_event.type,
+                content=incoming_event.content,
+                source=incoming_event.source,
+                metadata=incoming_event.metadata
+            )
+
+            print(f'got event of type {event.type}')
+
+            if event.type == 'screenshot':
+                self.agent_state.last_screenshot = event.content
+                
+            elif event.type == 'observation':
+                self.agent_state.update_mc_state(event.content)
+
+            elif event.type == 'chat':
+                self.memory.add_event(event)
+                async for decision in self.brain.think_stream(self.memory):
                     print(f"[Core] Got decision: {decision}")
                     await self.execute_decision(decision)
-            
+
+            elif event.type == 'execution_done':
+                pass
+
             self.event_queue.task_done()
+
+    def record_command(self, cmd: OutgoingCommand):
+        self.memory.add_event(Event(
+            type=cmd.type,
+            content=cmd.payload,
+            source='bot',
+            metadata={}
+        ))
 
     async def execute_decision(self, decision):
         print(f"[Exec] Doing: {decision}")
-        
-        if decision['type'] == 'talk':
-            payload = {
-                "target": "minecraft",
-                "type": "chat",
-                "payload": decision['content']
-            }
-            await server.send_packet(payload)
-            
-        elif decision['type'] == 'run_code':
-            payload = {
-                "target": "minecraft",
-                "type": "run_code",
-                "payload": decision['code']
-            }
-            await server.send_packet(payload)
+
+        cmd = OutgoingCommand(
+            type=decision['type'],
+            target='minecraft',
+            payload=decision['content'],
+        )
+
+        self.record_command(cmd)
+
+        await server.send_packet(cmd.model_dump())
 
 if __name__ == "__main__":
     agent = Agent()
