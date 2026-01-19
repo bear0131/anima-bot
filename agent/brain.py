@@ -3,13 +3,14 @@ from typing import Optional, Dict, Any, AsyncGenerator
 from interfaces.protocol import IncomingEvent
 from agent.short_memory import ShortTermMemory
 
-from agent.capabilities.chat_capability import ChatCapability
+from agent.capabilities import chat, coding
 
 
 class Brain:
     def __init__(self):
         self.caps = [
-            ChatCapability(),
+            chat.ChatCapability(),
+            coding.CodingCapability(),
         ]
 
     async def think_stream(self, memory: ShortTermMemory) -> AsyncGenerator[Dict[str, Any], None]:

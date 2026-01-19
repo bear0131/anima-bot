@@ -38,6 +38,12 @@ class Agent:
 
             print(f"[Core] Received: {incoming_event.type}")
 
+            if incoming_event.type == 'code_run_done':
+                print(f'CODE RUN DONE! \n{incoming_event.content}')
+
+            if incoming_event.error:
+                print(f'[Core] ERROR!\n{incoming_event.error}\n{incoming_event.content}')
+
             # 转换 IncomingEvent -> Event
             event = Event(
                 type=incoming_event.type,
@@ -45,8 +51,6 @@ class Agent:
                 source=incoming_event.source,
                 metadata=incoming_event.metadata
             )
-
-            print(f'got event of type {event.type}')
 
             if event.type == 'screenshot':
                 self.agent_state.last_screenshot = event.content

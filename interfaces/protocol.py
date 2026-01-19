@@ -4,9 +4,10 @@ from typing import Optional, Any, Dict, Literal
 # 1. 从 Node.js 发给 Python 的消息格式
 class IncomingEvent(BaseModel):
     source: str       # "minecraft"
-    type: str         # "chat", "spawn", "death", "error", "observation", "screenshot"
-    content: Any      # 具体的文本或数据
+    type: str         # "chat", "spawn", "death", "error", "observation", "screenshot", "code_run_done"
+    content: Optional[Any] = None  # 具体的文本或数据（执行成功时可省略）
     metadata: Optional[Dict] = {}
+    error: Optional[str] = None  # 错误信息，None 表示无错误
 
 # 2. 从 Python 发给 Node.js 的指令格式
 class OutgoingCommand(BaseModel):

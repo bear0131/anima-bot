@@ -11,8 +11,8 @@ load_dotenv()
 class ChatCapability(Capability):
     def __init__(self):
         prompts_dir = os.getenv("PROMPT_PATH", "agent/prompts")
-        prompt_path = os.path.join(prompts_dir, "persona.txt")
-        with open(prompt_path, "r", encoding="utf-8") as f:
+        system_prompt_path = os.path.join(prompts_dir, "chat_system.txt")
+        with open(system_prompt_path, "r", encoding="utf-8") as f:
             self.system_prompt = f.read()
 
         self.client = AsyncOpenAI(
@@ -23,7 +23,7 @@ class ChatCapability(Capability):
 
     async def can_handle(self, memory: ShortTermMemory) -> Tuple[bool, bool]:
         can_process = memory.get_last_event().type == "chat"
-        is_exclusive = can_process
+        is_exclusive = False
         return can_process, is_exclusive
 
     async def get_decision(

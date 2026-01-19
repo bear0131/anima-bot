@@ -241,37 +241,57 @@ ws.on('message', async (data) => {
         // ============================================================
         //  EXECUTION (执行)
         // ============================================================
+        // 6. 等待一点时间，确保世界状态稳定
+        await bot.waitForTicks(bot.waitTicks);
+
+        const code = command.payload;
+        const programs = bot.primitivesCode;
+
+        async function evaluateCode(code, programs) {
+            // Echo the code produced for players to see it. Don't echo when the bot code is already producing dialog or it will double echo
+            try {
+                await eval("(async () => {" + programs + "\n" + code + "})()");
+                return "success";
+            } catch (err) {
+                return err;
+            }
+        }
+
         try {
-            // 构造要执行的代码字符串。
-            // 这里的技巧是：我们不需要在字符串里再次 require 那些库了，
-            // 因为 eval 会向上查找，而我们已经在上面定义了 Vec3, GoalBlock 等变量。
-            const codePayload = command.payload;
+            const result = await evaluateCode(code, programs);
 
-            // Voyager 风格的拼接
-            const fullCode = `
-                (async () => { 
-                    ${bot.primitivesCode} 
-                    ; 
-                    ${codePayload} 
-                })()
-            `;
+            if (result !== "success") {
+                // 执行出错
+                console.error("Eval Error:", result);
+                bot.chat(`Error: ${result.message ? result.message.slice(0, 50) : result}`);
 
-            // 执行！
-            await eval(fullCode);
+                ws.send(JSON.stringify({
+                    source: 'minecraft',
+                    type: 'code_run_done',
+                    error: result.message || result,
+                    content: result.stack
+                }));
+            } else {
+                // 执行成功
+                console.log("Code executed successfully!");
+                ws.send(JSON.stringify({
+                    source: 'minecraft',
+                    type: 'code_run_done'
+                }));
+            }
 
-            // 执行成功
-            const state = bot.observe ? bot.observe() : {};
-            ws.send(JSON.stringify({
-                source: 'minecraft', type: 'execution_done', status: 'success', state: state
-            }));
+            // 等待最后的消息
+            await bot.waitForTicks(bot.waitTicks);
 
         } catch (e) {
-            console.error("Eval Error:", e);
-            bot.chat(`Error: ${e.message.slice(0, 50)}`); // 游戏里别刷屏
+            console.error("Execution Error:", e);
+            bot.chat(`Error: ${e.message.slice(0, 50)}`);
 
-            // 这里可以加入 handleError 逻辑来精确定位行号
             ws.send(JSON.stringify({
-                source: 'minecraft', type: 'execution_done', status: 'error', error: e.message, stack: e.stack
+                source: 'minecraft',
+                type: 'code_run_done',
+                error: e.message,
+                content: e.stack
             }));
         } finally {
             // 清理监听器，防止内存泄漏或逻辑冲突
