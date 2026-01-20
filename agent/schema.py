@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, Literal
 from datetime import datetime
+import uuid
 
 class Event(BaseModel):
     """系统内部流转的通用事件格式"""
@@ -8,8 +9,18 @@ class Event(BaseModel):
     content: Any       # 主要内容
     source: str        # "minecraft", "system", "bot"
     timestamp: datetime = Field(default_factory=datetime.now)
-    metadata: Optional[Dict] = {} # "user": username
+    metadata: Optional[Dict] = {}
 
+class MemoryNode(BaseModel):
+    """Level 2 记忆节点：经过 LLM 提炼的信息"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    content: str        # 提炼后的事实/知识，例如 "Steve likes apples."
+    importance: float   # 有效程度/重要性 (0-100)
+    created_at: float = Field(default_factory=lambda: datetime.now().timestamp())
+    last_updated: float = Field(default_factory=lambda: datetime.now().timestamp())
+    
+    # 辅助字段，用于你的 f 函数计算
+    decay_factor: float = 1.0  # 衰减因子
 
 class MCState(BaseModel):
     """Minecraft 游戏状态（原始数据）"""

@@ -1,3 +1,4 @@
+import os
 import asyncio
 from dotenv import load_dotenv
 import uvicorn
@@ -6,7 +7,7 @@ from interfaces.protocol import IncomingEvent, OutgoingCommand
 from agent.brain import Brain
 from agent.schema import Event, AgentState
 from agent.memory import Memory
-from agent.long_memory import MemoryCapability
+from openai import AsyncOpenAI
 
 load_dotenv()
 
@@ -18,8 +19,22 @@ class Agent:
         server.set_queue(self.event_queue)
 
         self.agent_state = AgentState()
-        self.long_memory = MemoryCapability()
-        self.memory = Memory(self.agent_state, self.long_memory)
+        self.llm_client = AsyncOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL") # 兼容第三方/中转
+        )
+
+        # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
+        self.memory_model = os.getenv("MEMORY_MODEL_NAME", "Qwen3-VL-30B-A3B-Instruct")
+
+        self.agent_state = AgentState()
+
+        # 3. 初始化 Memory (传入刚创建的 client 和模型名)
+        self.memory = Memory(
+            agent_state=self.agent_state,
+            llm_client=self.llm_client,
+            model_name=self.memory_model
+        )
         self.brain = Brain()
         
     async def start(self):

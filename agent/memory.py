@@ -1,201 +1,235 @@
 from collections import deque
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional
+import json
 import asyncio
+import time
+from datetime import datetime
 import dotenv
 
-from agent.schema import Event, AgentState
-# 引入 MemoryCapability 的类型提示 (如果导致循环引用可以用 TYPE_CHECKING)
-from agent.long_memory import MemoryCapability
+from agent.schema import Event, AgentState, MemoryNode
 
 dotenv.load_dotenv()
 bot_username = dotenv.get_key('.env', 'BOT_USERNAME') or 'animabot'
 
 class Memory:
-    def __init__(self, agent_state: AgentState, memory_capability: MemoryCapability, max_history=1):
-        """
-        Args:
-            agent_state: 代理的当前状态对象
-            memory_capability: 长期记忆能力的实例 (用于检索)
-            max_history: 短期记忆保留的事件数量
-        """
-        self.events: deque[Event] = deque(maxlen=max_history)
+    def __init__(self, agent_state: AgentState, llm_client, model_name: str):
         self.state = agent_state
-        
-        # 持有长期记忆能力的引用
-        self.memory_capability = memory_capability
-        
-        # 缓存的“当前脑海中的长期记忆”
-        # 它是动态变化的，随着短期记忆的变化而刷新
-        self.relevant_memories: List[str] = []
+        self.llm_client = llm_client # 需要传入 LLM 客户端用于重构记忆
+        self.model_name = model_name
+
+        # --- 配置参数 ---
+        self.level1_limit = 1       # Level 1 容量 (原汁原味的 Event)
+        self.consolidate_batch = 1  # 每积累多少条新 Event 触发一次 Level 2 重构
+        self.level2_limit = 500       # Level 2 最大保留条数 (Pruning 阈值)
+        self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
+
+        # --- Level 1: 短期工作记忆 ---
+        self.level1_events: deque[Event] = deque(maxlen=self.level1_limit)
+
+        # --- Level 2: 长期语义记忆 ---
+        self.level2_nodes: List[MemoryNode] = []
+
+        # --- 缓冲区: 用于积累待重构的 Event ---
+        self.consolidation_buffer: List[Event] = []
+
+        # 锁: 防止重构时并发写入导致数据错乱
+        self.lock = asyncio.Lock()
+    
+    def get_last_event(self) -> Optional[Event]:
+        """
+        获取 Level 1 (短期工作记忆) 中的最后一个事件。
+        通常用于 Brain 判断当前 tick 发生了什么，或者用于 Capability 检查触发条件。
+        """
+        # level1_events 是一个 deque，[-1] 就是最新加入的那条
+        return self.level1_events[-1] if self.level1_events else None
 
     def add_event(self, event: Event):
         """
-        添加事件到短期记忆。
-        如果记忆已满，溢出的旧事件会自动转存到长期记忆。
+        添加事件。
+        1. 过滤垃圾事件。
+        2. 加入 Level 1 (Deque)。
+        3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
-        # 1. 检查当前队列是否已满
-        if len(self.events) >= self.events.maxlen:
-            # 2. 手动弹出最旧的一个事件 (FIFO)
-            oldest_event = self.events.popleft()
-            
-            # 3. 决定是否要存入长期记忆
-            # 不是所有鸡毛蒜皮的小事都要记一辈子，这里加个过滤器
-            if self._should_save_to_ltm(oldest_event):
-                try:
-                    # 调用 MemoryCapability 存入向量库
-                    # 注意：假设 memory_capability.add_event 是同步的 (ChromaDB add 是同步的)
-                    # 如果你的 add_event 是 async 的，这里需要用 asyncio.create_task 包装
-                    print("add event in long memory: ", oldest_event)
-                    self.memory_capability.add_event(oldest_event)
-                    # print(f"💾 [Memory Transfer] Moved event to LTM: {oldest_event.content[:30]}...")
-                except Exception as e:
-                    print(f"⚠️ Failed to save memory to LTM: {e}")
-
-        # 4. 将新事件加入短期记忆
-        self.events.append(event)
-
-    def _should_save_to_ltm(self, event: Event) -> bool:
-        """
-        [过滤器] 判断一个即将被移出短期记忆的事件，是否值得存入长期记忆。
-        """
-        # 策略 1: 聊天记录通常比较重要 (特别是 User 说的)
-        if event.type == "chat":
-            return True
-        
-        # 策略 2: 代码运行成功的结果可能包含重要信息（如考察环境的结果）
-        if event.type == "code_run_done":
-            return True
-            
-        # 策略 3: 视觉总结（如果你有的话）
-        if event.type == "visual_summary":
-            return True
-
-        # 策略 4: 忽略系统垃圾日志、报错信息、运行请求等
-        # "code_run_request" 通常只是代码，不如 result 重要
-        # "system_log" 可能太琐碎
-        # "error" 除非经常报错，否则不需要记太久
-        return False
-
-    def get_last_event(self) -> Optional[Event]:
-        """获取最后一个事件"""
-        return self.events[-1] if self.events else None 
-
-    def refresh_relevant_memories(self):
-        """
-        【核心功能】主动联想
-        根据短期记忆中最近的几条事件，去长期记忆库中检索相关信息。
-        应该在 Brain 每次做决策前调用一次。
-        """
-        if not self.events:
+        # 1. 过滤：code_run_request 包含大量代码，且通常紧接着 code_run_done，可以不记
+        if event.type == "code_run_request":
             return
 
-        # 1. 策略：提取最近的 1-2 条由 User 发出的 chat 或 request
-        #    我们不需要每一条 log 都去检索，那太慢且会有噪音。
-        #    只关注用户说了什么，或者 Bot 刚做了什么重要决定。
-        queries = []
-        lookback_count = 0
-        max_lookback = 3 # 只看最近 3 条里的有效信息
-        
-        # 倒序遍历
-        for event in reversed(self.events):
-            if lookback_count >= max_lookback:
-                break
+        # 2. 加入 Level 1 (供 ChatContext 实时使用)
+        self.level1_events.append(event)
+
+        # 3. 加入缓冲区 (供 Level 2 重构使用)
+        self.consolidation_buffer.append(event)
+
+        # 4. 检查是否需要触发 Level 2 重构
+        if len(self.consolidation_buffer) >= self.consolidate_batch:
+            # 触发异步重构，不要阻塞主线程
+            asyncio.create_task(self._reconstruct_level2())
+
+    async def _reconstruct_level2(self):
+        """
+        【核心】重构 Level 2 记忆。
+        LLM 读取 (Level 2 + Buffer) -> 输出 (New Level 2)
+        """
+        async with self.lock:
+            if not self.consolidation_buffer:
+                return
             
-            # 提取 User 的聊天内容作为检索 Query
-            if event.type == "chat" and event.source != "bot":
-                queries.append(event.content)
-                lookback_count += 1
+            # 1. 准备输入数据
+            current_memories = [
+                {"id": n.id, "content": n.content, "importance": n.importance} 
+                for n in self.level2_nodes
+            ]
             
-            # 也可以提取代码运行请求 (任务目标)
-            elif event.type == "code_run_request":
-                queries.append(event.content)
-                lookback_count += 1
+            new_events_text = ""
+            for e in self.consolidation_buffer:
+                sender = e.metadata.get('user', e.source)
+                new_events_text += f"[{e.type}] {sender}: {e.content}\n"
 
-        if not queries:
-            # 如果最近全是系统日志或Bot自言自语，保持上次的记忆或清空，这里选择保留旧的或清空皆可
-            # 为了防止记忆残留干扰新话题，选择不做新检索 (保持不变) 或 清空
-            # 这里选择：如果没有有效Query，就不检索了，节省资源
-            return
+            # 2. 清空缓冲区
+            self.consolidation_buffer.clear()
 
-        # 2. 执行检索 (使用 set 去重)
-        combined_memories: Set[str] = set()
-        
-        for q in queries:
-            # 调用 capability 的 retrieve (它会自动处理权重更新)
-            # 每个 query 找 Top-2 即可，不用太多
-            results = self.memory_capability.retrieve(query=str(q), k=2)
-            for mem in results:
-                combined_memories.add(mem)
+            # --- 修改开始：拆分 Prompt ---
+            
+            # A. 系统指令 (System Prompt) - 只有指令和格式
+            system_instruction = """
+            You are the memory manager for a Minecraft Bot.
+            
+            ### Task:
+            1. **Absorb**: Read the Recent Events and update the Knowledge Base.
+            2. **Summarize**: Create new memory nodes for new facts. Merge similar nodes.
+            3. **Update**: If a recent event contradicts old memory, update the old memory.
+            4. **Evaluate**: Assign an 'importance' score (0-100) to each node.
+            
+            ### Output Format:
+            Return ONLY a JSON list of objects: [{"content": "...", "importance": 85}]
+            """
 
-        # 3. 更新缓存
-        self.relevant_memories = list(combined_memories)
-        
-        # (可选) 打印调试信息，看看它联想到了什么
-        # if self.relevant_memories:
-        #     print(f"🧠 [Memory Association] Based on '{queries[0]}...', recalled: {len(self.relevant_memories)} items.")
+            # B. 用户数据 (User Prompt) - 只有数据
+            user_data = f"""
+            ### Current Knowledge Base (Level 2 Memory):
+            {json.dumps(current_memories, ensure_ascii=False, indent=2)}
 
-    def render_state_for_prompt(self) -> str:
-        """渲染 MC 状态为文本"""
-        if not self.state.mc_state:
-            return "当前状态: 未知\n"
+            ### Recent Events (New Information):
+            {new_events_text}
+            
+            Please consolidate these memories now.
+            """
 
-        mc = self.state.mc_state
-        lines = []
-        lines.append(f"### 当前游戏状态")
-        lines.append(f"位置: x={mc.position.get('x', 0):.1f}, y={mc.position.get('y', 0):.1f}, z={mc.position.get('z', 0):.1f}" if mc.position else "位置: 未知")
-        lines.append(f"生物群系: {mc.biome or '未知'}")
-        lines.append(f"时间: {mc.time_of_day or '未知'}")
-        lines.append(f"生命值: {mc.health or 0:.1f}/20")
-        lines.append(f"饥饿值: {mc.hunger or 0:.1f}/20")
-        
-        if mc.equipment:
-            safe_equipment = [(item or "none") for item in mc.equipment]
-            lines.append(f"装备: {', '.join(safe_equipment)}")
-        
-        if mc.inventory:
-            items = [f"{name}x{count}" for name, count in mc.inventory.items()]
-            lines.append(f"物品栏: {', '.join(items)}")
+            try:
+                if not self.llm_client:
+                    print("⚠️ No LLM client provided for memory consolidation.")
+                    return
 
-        return '\n'.join(lines) + '\n'
+                # C. 发送请求 (包含 system 和 user)
+                response = await self.llm_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": user_data} # <--- 这里加上了 user 消息，解决了报错
+                    ],
+                    response_format={"type": "json_object"} 
+                )
+                
+                content = response.choices[0].message.content
+
+                print("content: ", content)
+
+                result = json.loads(content)
+                
+                # --- 修改开始：更稳健的 JSON 解析逻辑 ---
+                
+                raw_list = []
+                
+                # 情况 1: LLM 直接返回了列表 (e.g. [{"content":...}, ...])
+                if isinstance(result, list):
+                    raw_list = result
+                
+                # 情况 2: LLM 返回了字典 (e.g. {"memories": [...]})
+                elif isinstance(result, dict):
+                    # 尝试从常见 Key 中提取，如果没有就取第一个值
+                    raw_list = result.get("memories") or result.get("nodes")
+                    if not raw_list:
+                        # 最后的兜底：取字典里的第一个 value
+                        first_value = next(iter(result.values()), [])
+                        if isinstance(first_value, list):
+                            raw_list = first_value
+                
+                # 安全检查：确保 raw_list 确实是列表
+                if not isinstance(raw_list, list):
+                    print(f"⚠️ Memory consolidation warning: LLM output format unexpected: {type(result)}")
+                    raw_list = []
+
+                # --- 修改结束 ---
+
+                new_nodes = []
+                current_time = datetime.now().timestamp()
+
+                for item in raw_list:
+                    # 有时候 LLM 可能会生成字符串而不是对象，做个防御
+                    if not isinstance(item, dict):
+                        continue
+                        
+                    text = item.get("content")
+                    score = float(item.get("importance", 50))
+                    
+                    if score < self.min_importance:
+                        continue 
+
+                    node = MemoryNode(
+                        content=text,
+                        importance=score,
+                        last_updated=current_time
+                    )
+                    new_nodes.append(node)
+
+                new_nodes.sort(key=lambda x: x.importance, reverse=True)
+                self.level2_nodes = new_nodes[:self.level2_limit]
+
+                print(f"🧠 [Memory Consolidation] Refactored Level 2. Count: {len(self.level2_nodes)}")
+
+            except Exception as e:
+                print(f"❌ Memory consolidation failed: {e}")
 
     def render_llm_context(self, include_image=True) -> List[Dict]:
         """
-        渲染 OpenAI 格式的上下文。
-        自动包含：长期记忆(System) -> 短期记忆(History) -> 当前状态(System) -> 视觉(User)
+        渲染 Context 给 Chat LLM。
+        结构：Level 2 (Summary) -> Level 1 (Raw Events) -> MC State
         """
         messages = []
 
-        # --- 1. 长期记忆注入 (自动获取 self.relevant_memories) ---
-        self.refresh_relevant_memories()
-        if self.relevant_memories:
-            memory_text = "### 🧠 Recalled Memories (Related to current context)\n"
-            for i, mem in enumerate(self.relevant_memories):
-                memory_text += f"{i+1}. {mem}\n"
-            
-            messages.append({
-                "role": "system", 
-                "content": memory_text
-            })
+        # --- 层级 2: 长期语义记忆 (精炼后的知识) ---
+        if self.level2_nodes:
+            # 按重要性排序展示
+            sorted_nodes = sorted(self.level2_nodes, key=lambda x: x.importance, reverse=True)
+            memory_text = "### 🧠 Long-term Knowledge (Summarized)\n"
+            for node in sorted_nodes:
+                memory_text += f"- {node.content} (Imp: {node.importance})\n"
+            print("memory text: ", memory_text)
+            messages.append({"role": "system", "content": memory_text})
 
-        # --- 2. 短期记忆历史 ---
-        for event in self.events:
+        # --- 层级 1: 短期工作记忆 (原始 Event 流) ---
+        # 这里不需要 System 前缀，直接当作对话历史
+        for event in self.level1_events:
             if event.type == "chat":
                 if event.source == 'bot':
                     messages.append({"role": "assistant", "content": event.content})
                 else:
                     username = event.metadata.get('user', 'unknown')
                     messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
-            elif event.type == "code_run_request":
-                messages.append({"role": "system", "content": f"[System] Executing code: {event.content}"})
+            
             elif event.type == "code_run_done":
-                messages.append({"role": "system", "content": f"[System] Code finished. Result: {event.content}"})
+                # 结果可以保留，作为近期操作的反馈
+                messages.append({"role": "system", "content": f"[Action Result] {event.content}"})
+            
             elif event.type == "error":
                 messages.append({"role": "system", "content": f"[Error] {event.content}"})
+            
+            # code_run_request 已经被 filter 掉了，不会出现在这里
 
-        # --- 3. 当前状态 ---
+        # --- 游戏状态 (保持不变) ---
         messages.append({"role": "system", "content": self.render_state_for_prompt()})
 
-        # --- 4. 视觉输入 ---
+        # --- 视觉 (保持不变) ---
         if include_image and self.state.last_screenshot:
             messages.append({
                 "role": "user", 
@@ -209,3 +243,17 @@ class Memory:
             })
 
         return messages
+
+    # ... render_state_for_prompt 保持不变 ...
+    def render_state_for_prompt(self) -> str:
+        # (直接复制之前的代码即可)
+        if not self.state.mc_state:
+            return "当前状态: 未知\n"
+        mc = self.state.mc_state
+        lines = [f"### 当前游戏状态"]
+        lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
+        lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
+        if mc.inventory:
+            items = [f"{n}x{c}" for n, c in mc.inventory.items()]
+            lines.append(f"物品: {', '.join(items)}")
+        return '\n'.join(lines) + '\n'

@@ -35,7 +35,7 @@ class ChatCapability(Capability):
         """
         # 1. 使用 memory 渲染 OpenAI 格式的消息
         messages_payload = memory.render_llm_context(
-            include_image=True,
+            include_image=False,
         )
 
         # 2. 在最前面插入 system prompt

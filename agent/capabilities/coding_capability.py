@@ -93,6 +93,8 @@ class CodingCapability(Capability):
         memory_context = memory.render_llm_context(
             include_image=False,
         )
+
+        print("memory_context: ", memory_context)
         # 暂时不给 coding 加图片。
 
         # 3. 调 LLM (使用 JSON Mode)

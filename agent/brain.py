@@ -10,7 +10,7 @@ class Brain:
     def __init__(self):
         self.caps = [
             chat_capability.ChatCapability(),
-            coding_capability.CodingCapability(),
+            #coding_capability.CodingCapability(),
         ]
 
     async def think_stream(self, memory: Memory) -> AsyncGenerator[Dict[str, Any], None]:
