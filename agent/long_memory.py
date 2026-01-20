@@ -14,7 +14,6 @@ from openai import OpenAI  # 使用官方 OpenAI 客户端
 from dotenv import load_dotenv
 from agent.capabilities.base import Capability
 from agent.schema import Event
-from agent.short_memory import ShortTermMemory
 
 load_dotenv()
 
@@ -45,7 +44,7 @@ class ParateraEmbeddingFunction(EmbeddingFunction):
             raise e
 
 
-class MemoryCapability(Capability):
+class MemoryCapability():
     def __init__(self):
         # 1. 初始化配置参数
         self.logger = logging.getLogger("MemoryCapability")
@@ -89,15 +88,9 @@ class MemoryCapability(Capability):
         if self.collection.count() > 0:
             self.global_tick = self.collection.count()
 
-    # --- Capability 接口 (被动调用) ---
-    async def can_handle(self, memory: ShortTermMemory) -> Tuple[bool, bool]:
-        return False, False
-
-    async def get_decision(self, memory: ShortTermMemory) -> dict:
-        return {}
-
     # --- 核心功能 1: 存储 ---
     def add_event(self, event: Event):
+        print("add event: ", event)
         self.global_tick += 1
         current_tick = self.global_tick
 

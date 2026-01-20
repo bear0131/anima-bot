@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 sys.path.append(os.getcwd())
 
 try:
-    from agent.capabilities.memory import MemoryCapability
+    from agent.long_memory import MemoryCapability
     from agent.schema import Event
 except ImportError:
     print("❌ 找不到模块，请确保在项目根目录下运行。")

@@ -60,10 +60,16 @@ OPENAI_BASE_URL=https://llmapi.paratera.com/v1/
 
 CHAT_MODEL_NAME=Qwen3-VL-30B-A3B-Instruct
 # Qwen3-VL-235B-A22B-Instruct 这个更高级，但先用便宜的
-CODE_MODEL_NAME=Qwen3-Coder-Plus
+CODING_MODEL_NAME=Qwen3-Coder-Plus
 
 # Prompt Paths
 PROMPT_PATH=agent/prompts
+
+# Memory Parameters
+MEMORY_DB_PATH=./memory_db
+MEMORY_MAX_CAPACITY=10000
+EMBEDDING_MODEL_NAME=GLM-Embedding-3
+OPENAI_EMBEDDING_BASE_URL=https://llmapi.paratera.com/v1
 ```
 
 ## Running

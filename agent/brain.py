@@ -1,19 +1,19 @@
 import asyncio
 from typing import Optional, Dict, Any, AsyncGenerator
 from interfaces.protocol import IncomingEvent
-from agent.short_memory import ShortTermMemory
+from agent.memory import Memory
 
-from agent.capabilities import chat, coding
+from agent.capabilities import chat_capability, coding_capability
 
 
 class Brain:
     def __init__(self):
         self.caps = [
-            chat.ChatCapability(),
-            coding.CodingCapability(),
+            chat_capability.ChatCapability(),
+            coding_capability.CodingCapability(),
         ]
 
-    async def think_stream(self, memory: ShortTermMemory) -> AsyncGenerator[Dict[str, Any], None]:
+    async def think_stream(self, memory: Memory) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式处理事件，按完成顺序产出结果。
         """

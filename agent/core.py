@@ -5,7 +5,8 @@ from interfaces import server
 from interfaces.protocol import IncomingEvent, OutgoingCommand
 from agent.brain import Brain
 from agent.schema import Event, AgentState
-from agent.short_memory import ShortTermMemory
+from agent.memory import Memory
+from agent.long_memory import MemoryCapability
 
 load_dotenv()
 
@@ -17,7 +18,8 @@ class Agent:
         server.set_queue(self.event_queue)
 
         self.agent_state = AgentState()
-        self.memory = ShortTermMemory(self.agent_state)
+        self.long_memory = MemoryCapability()
+        self.memory = Memory(self.agent_state, self.long_memory)
         self.brain = Brain()
         
     async def start(self):
