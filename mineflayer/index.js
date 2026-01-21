@@ -148,6 +148,8 @@ function parseArgs() {
 const argv = parseArgs();
 // headless 参数：默认为 true，如果传入 --headless=false 则设为 false
 const headlessMode = argv.headless !== 'false';
+// prismarine_viewer 参数：默认为 true，如果传入 --prismarine_viewer=false 则设为 false
+const enablePrismarineViewer = argv.prismarine_viewer !== 'false';
 
 // --- 依赖引入 ---
 // 这里的 require 只是为了让 node 知道我们要用这些包
@@ -204,27 +206,31 @@ ws.on('open', () => {
 bot.once('spawn', async () => {
     console.log('Bot Spawned.');
 
-    // 启动 Viewer (Web服务器)
-    mineflayerViewer(bot, { port: 3007, firstPerson: true });
-    console.log('Viewer started on port 3007');
+    if (enablePrismarineViewer) {
+        // 启动 Viewer (Web服务器)
+        mineflayerViewer(bot, { port: 3007, firstPerson: true });
+        console.log('Viewer started on port 3007');
 
-    try {
-        // 3. 启动 Puppeteer
-        browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
-        page = await browser.newPage();
+        try {
+            // 3. 启动 Puppeteer
+            browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
+            page = await browser.newPage();
 
-        // 设置视口大小
-        await page.setViewport({ width: 640, height: 480 });
+            // 设置视口大小
+            await page.setViewport({ width: 640, height: 480 });
 
-        // 访问 Viewer 页面
-        await page.goto('http://localhost:3007');
+            // 访问 Viewer 页面
+            await page.goto('http://localhost:3007');
 
-        // 等待页面加载
-        await new Promise(r => setTimeout(r, 2000));
+            // 等待页面加载
+            await new Promise(r => setTimeout(r, 2000));
 
-        console.log('Ready to take screenshots!');
-    } catch (err) {
-        console.error('Failed to start screenshot server.', err);
+            console.log('Ready to take screenshots!');
+        } catch (err) {
+            console.error('Failed to start screenshot server.', err);
+        }
+    } else {
+        console.log('Prismarine viewer disabled');
     }
 
     const mcData = require("minecraft-data")(bot.version);
@@ -252,7 +258,7 @@ bot.once('spawn', async () => {
         let snapshotPromise = Promise.resolve();
 
         // 如果可以截图，则执行截图操作
-        if (ws.readyState == WebSocket.OPEN && !isSnapshotting && page) {
+        if (enablePrismarineViewer && ws.readyState == WebSocket.OPEN && !isSnapshotting && page) {
             isSnapshotting = true;
             snapshotPromise = page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 })
                 .then(base64Data => {
