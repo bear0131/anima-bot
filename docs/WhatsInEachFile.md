@@ -23,14 +23,14 @@ class Event：在系统内流通，存储于短期记忆。
 ```python
 class Event(BaseModel):
     """系统内部流转的通用事件格式"""
-    type: str          # "chat", "code_run_request", "code_run_done", "error", "system_log"
+    type: str          # "chat", "code_run_request", "code_run_result", "error", "system_log"
     content: Any       # 主要内容
     source: str        # "minecraft", "system", "bot"
     timestamp: datetime = Field(default_factory=datetime.now)
     metadata: Optional[Dict] = {} # "user": username
 ```
 
-> type 的类型应该统一了，希望吧。"chat", "code_run_request", "code_run_done", "error", "system_log"，目前应该是这些。
+> type 的类型应该统一了，希望吧。"chat", "code_run_request", "code_run_result", "error", "system_log"，目前应该是这些。
 
 > 注意机器人发的信息的 source 不是 "minecraft" 而是 "bot"。
 
@@ -104,7 +104,7 @@ python 服务器到别的端的接口。
 # 1. 从 Node.js 发给 Python 的消息格式
 class IncomingEvent(BaseModel):
     source: str       # "minecraft"
-    type: str         # "chat", "observation", "screenshot", "code_run_done"
+    type: str         # "chat", "observation", "screenshot", "code_run_result"
     content: Optional[Any] = None  # 具体的文本或数据（code run done 执行成功时可省略）
     metadata: Optional[Dict] = {}
     error: Optional[str] = None  # 错误信息，None 表示无错误

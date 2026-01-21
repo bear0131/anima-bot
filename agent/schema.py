@@ -5,7 +5,7 @@ import uuid
 
 class Event(BaseModel):
     """系统内部流转的通用事件格式"""
-    type: str          # "chat", "code_run_request", "code_run_done", "error", "system_log"
+    type: str          # "chat", "code_run_request", "code_run_result", "error", "system_log"
     content: Any       # 主要内容
     source: str        # "minecraft", "system", "bot"
     timestamp: datetime = Field(default_factory=datetime.now)

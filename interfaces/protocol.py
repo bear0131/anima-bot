@@ -4,7 +4,7 @@ from typing import Optional, Any, Dict, Literal
 # 1. 从 Node.js 发给 Python 的消息格式
 class IncomingEvent(BaseModel):
     source: str       # "minecraft"
-    type: str         # "chat", "observation", "screenshot", "code_run_done"
+    type: str         # "chat", "observation", "screenshot", "code_run_result"
     content: Optional[Any] = None  # 具体的文本或数据（code run done 执行成功时可省略）
     metadata: Optional[Dict] = {}
     error: Optional[str] = None  # 错误信息，None 表示无错误

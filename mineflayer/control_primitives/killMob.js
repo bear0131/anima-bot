@@ -26,7 +26,7 @@ async function killMob(bot, mobName, timeout = 300) {
             entity.position.distanceTo(bot.entity.position) < 48
     );
     if (!entity) {
-        bot.chat(`No ${mobName} nearby, please explore first`);
+        report(`No ${mobName} nearby, please explore first`);
         _killMobFailCount++;
         if (_killMobFailCount > 10) {
             throw new Error(
@@ -36,6 +36,7 @@ async function killMob(bot, mobName, timeout = 300) {
         return;
     }
 
+    report(`Killing ${mobName}`);
     let droppedItem;
     if (mainHandItem && weaponsForShooting.includes(mainHandItem.name)) {
         bot.hawkEye.autoAttack(entity, mainHandItem.name);
@@ -48,4 +49,5 @@ async function killMob(bot, mobName, timeout = 300) {
         await bot.collectBlock.collect(droppedItem, { ignoreNoPath: true });
     }
     bot.save(`${mobName}_killed`);
+    report(`Killed ${mobName}`);
 }

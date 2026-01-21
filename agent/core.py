@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import uvicorn
 from interfaces import server
 from interfaces.protocol import IncomingEvent, OutgoingCommand
-from agent.brain import Brain
+from agent.main_agent import MainAgent
 from agent.schema import Event, AgentState
 from agent.memory import Memory
 from openai import AsyncOpenAI
@@ -27,15 +27,13 @@ class Agent:
         # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
         self.memory_model = os.getenv("MEMORY_MODEL_NAME", "Qwen3-VL-30B-A3B-Instruct")
 
-        self.agent_state = AgentState()
-
         # 3. 初始化 Memory (传入刚创建的 client 和模型名)
         self.memory = Memory(
             agent_state=self.agent_state,
             llm_client=self.llm_client,
             model_name=self.memory_model
         )
-        self.brain = Brain()
+        self.main_agent = MainAgent()
         
     async def start(self):
         # 启动 Server (作为一个后台 Task)
@@ -53,13 +51,7 @@ class Agent:
         while True:
             incoming_event = await self.event_queue.get()
 
-            print(f"[Core] Received: {incoming_event.type}")
-
-            if incoming_event.type == 'code_run_done':
-                print(f'CODE RUN DONE! \n{incoming_event.content}')
-
-            if incoming_event.error:
-                print(f'[Core] ERROR!\n{incoming_event.error}\n{incoming_event.content}')
+            # print(f"[Core] Received: {incoming_event.type}")
 
             # 转换 IncomingEvent -> Event
             event = Event(
@@ -71,18 +63,49 @@ class Agent:
 
             if event.type == 'screenshot':
                 self.agent_state.last_screenshot = event.content
-                
+
             elif event.type == 'observation':
                 self.agent_state.update_mc_state(event.content)
 
             elif event.type == 'chat':
+                # 1. 将 chat 事件加入 memory
                 self.memory.add_event(event)
-                async for decision in self.brain.think_stream(self.memory):
-                    print(f"[Core] Got decision: {decision}")
+                print(f"\n{'='*60}")
+                print(f"[Core] 📥 收到聊天事件: {event.content}")
+                print(f"{'='*60}")
+                # 2. 调用 main_agent 处理
+                async for decision in self.main_agent.think_stream(self.memory):
+                    print(f"[Core] 📤 决策: {decision['type']} - {decision.get('content', '')[:100]}")
                     await self.execute_decision(decision)
 
-            elif event.type == 'execution_done':
-                pass
+            elif event.type == 'code_run_result':
+                # 1. 构建结果描述
+                print(f"\n{'='*60}")
+                if incoming_event.error:
+                    result_desc = f"代码执行失败: {incoming_event.error}"
+                    if incoming_event.content:
+                        result_desc += f"\n错误详情:\n{incoming_event.content}"
+                    print(f"[Core] ❌ 代码执行失败: {incoming_event.error}")
+                else:
+                    result_desc = f"代码执行成功!"
+                    if incoming_event.content:
+                        result_desc += f"\n返回结果:\n{incoming_event.content}"
+                    print(f"[Core] ✅ 代码执行成功")
+                    if incoming_event.content:
+                        print(f"[Core] 📄 返回内容:\n{incoming_event.content}")
+                print(f"{'='*60}\n")
+
+                # 2. 更新 event content 为可读的描述
+                event.content = result_desc
+
+                # 3. 将 code_run_result 事件加入 memory
+                self.memory.add_event(event)
+
+                # 4. 调用 main_agent 继续思考（基于执行结果）
+                # 此时 last_event 是 code_run_result，main_agent 需要能处理这种情况
+                async for decision in self.main_agent.think_stream(self.memory):
+                    print(f"[Core] 📤 决策: {decision['type']} - {decision.get('content', '')[:100]}")
+                    await self.execute_decision(decision)
 
             self.event_queue.task_done()
 

@@ -1,14 +1,14 @@
 async function givePlacedItemBack(bot, name, position) {
-    await bot.chat("/gamerule doTileDrops false");
+    await report("/gamerule doTileDrops false");
     // iterate name and position
     const history = [];
     for (let i = 0; i < name.length; i++) {
         await givePlacedItemBackSingle(bot, name[i], position[i]);
     }
-    await bot.chat("/gamerule doTileDrops true");
+    await report("/gamerule doTileDrops true");
 
     async function givePlacedItemBackSingle(bot, name, position) {
-        bot.chat(`/give bot ${name} 1`);
+        report(`/give bot ${name} 1`);
         const x = Math.floor(position.x);
         const y = Math.floor(position.y);
         const z = Math.floor(position.z);
@@ -22,9 +22,8 @@ async function givePlacedItemBack(bot, name, position) {
                         block?.name === name &&
                         !history.includes(block.position)
                     ) {
-                        await bot.chat(
-                            `/setblock ${x + dx} ${y + dy} ${
-                                z + dz
+                        await report(
+                            `/setblock ${x + dx} ${y + dy} ${z + dz
                             } air destroy`
                         );
                         history.push(block.position);

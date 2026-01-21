@@ -12,7 +12,6 @@ from openai import OpenAI  # 使用官方 OpenAI 客户端
 
 # 系统依赖
 from dotenv import load_dotenv
-from agent.capabilities.base import Capability
 from agent.schema import Event
 
 load_dotenv()

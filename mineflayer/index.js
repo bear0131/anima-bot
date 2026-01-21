@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const WebSocket = require('ws');
@@ -248,35 +249,49 @@ ws.on('message', async (data) => {
         const programs = bot.primitivesCode;
 
         async function evaluateCode(code, programs) {
-            // Echo the code produced for players to see it. Don't echo when the bot code is already producing dialog or it will double echo
+            let outputMessages = []; // 用于收集输出
+
+            // 将 report 注入到 eval 可访问的全局作用域
+            global.report = (msg) => {
+                if (typeof msg === 'string') {
+                    outputMessages.push(msg);
+                } else {
+                    outputMessages.push(JSON.stringify(msg));
+                }
+            };
+
             try {
+                // 使用 eval 保持作用域访问
                 await eval("(async () => {" + programs + "\n" + code + "})()");
-                return "success";
+                delete global.report;
+                return { success: true, messages: outputMessages };
             } catch (err) {
-                return err;
+                delete global.report;
+                return { success: false, error: err, messages: outputMessages };
             }
         }
 
         try {
             const result = await evaluateCode(code, programs);
 
-            if (result !== "success") {
+            if (!result.success) {
                 // 执行出错
-                console.error("Eval Error:", result);
-                bot.chat(`Error: ${result.message ? result.message.slice(0, 50) : result}`);
+                console.error("Eval Error:", result.error);
+                bot.chat(`Error: ${result.error.message ? result.error.message.slice(0, 50) : result.error}`);
 
                 ws.send(JSON.stringify({
                     source: 'minecraft',
-                    type: 'code_run_done',
-                    error: result.message || result,
-                    content: result.stack
+                    type: 'code_run_result',
+                    error: result.error.message || result.error,
+                    content: result.messages.join('\n') || result.error.stack
                 }));
             } else {
                 // 执行成功
                 console.log("Code executed successfully!");
                 ws.send(JSON.stringify({
                     source: 'minecraft',
-                    type: 'code_run_done'
+                    type: 'code_run_result',
+                    content: result.messages.join('\n') || "执行完成，无输出。"
                 }));
             }
 
@@ -289,7 +304,7 @@ ws.on('message', async (data) => {
 
             ws.send(JSON.stringify({
                 source: 'minecraft',
-                type: 'code_run_done',
+                type: 'code_run_result',
                 error: e.message,
                 content: e.stack
             }));

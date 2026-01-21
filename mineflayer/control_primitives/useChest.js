@@ -1,7 +1,7 @@
 async function getItemFromChest(bot, chestPosition, itemsToGet) {
     // return if chestPosition is not Vec3
     if (!(chestPosition instanceof Vec3)) {
-        bot.chat("chestPosition for getItemFromChest must be a Vec3");
+        report("chestPosition for getItemFromChest must be a Vec3");
         return;
     }
     await moveToChest(bot, chestPosition);
@@ -10,19 +10,19 @@ async function getItemFromChest(bot, chestPosition, itemsToGet) {
     for (const name in itemsToGet) {
         const itemByName = mcData.itemsByName[name];
         if (!itemByName) {
-            bot.chat(`No item named ${name}`);
+            report(`No item named ${name}`);
             continue;
         }
 
         const item = chest.findContainerItem(itemByName.id);
         if (!item) {
-            bot.chat(`I don't see ${name} in this chest`);
+            report(`I don't see ${name} in this chest`);
             continue;
         }
         try {
             await chest.withdraw(item.type, null, itemsToGet[name]);
         } catch (err) {
-            bot.chat(`Not enough ${name} in chest.`);
+            report(`Not enough ${name} in chest.`);
         }
     }
     await closeChest(bot, chestBlock);
@@ -41,18 +41,18 @@ async function depositItemIntoChest(bot, chestPosition, itemsToDeposit) {
     for (const name in itemsToDeposit) {
         const itemByName = mcData.itemsByName[name];
         if (!itemByName) {
-            bot.chat(`No item named ${name}`);
+            report(`No item named ${name}`);
             continue;
         }
         const item = bot.inventory.findInventoryItem(itemByName.id);
         if (!item) {
-            bot.chat(`No ${name} in inventory`);
+            report(`No ${name} in inventory`);
             continue;
         }
         try {
             await chest.deposit(item.type, null, itemsToDeposit[name]);
         } catch (err) {
-            bot.chat(`Not enough ${name} in inventory.`);
+            report(`Not enough ${name} in inventory.`);
         }
     }
     await closeChest(bot, chestBlock);

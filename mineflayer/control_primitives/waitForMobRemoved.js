@@ -13,7 +13,7 @@ function waitForMobRemoved(bot, entity, timeout = 300) {
             if (e === entity) {
                 success = true;
                 clearTimeout(timeoutId);
-                bot.chat(`Killed ${entity.name}!`);
+                report(`Killed ${entity.name}!`);
                 bot.pvp.stop();
             }
         }
@@ -56,7 +56,7 @@ function waitForMobShot(bot, entity, timeout = 300) {
             if (e === entity) {
                 success = true;
                 clearTimeout(timeoutId);
-                bot.chat(`Shot ${entity.name}!`);
+                report(`Shot ${entity.name}!`);
                 bot.hawkEye.stop();
             }
         }

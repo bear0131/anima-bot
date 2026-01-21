@@ -44,18 +44,16 @@ function failedCraftFeedback(bot, name, item, craftingTable) {
                     null
                 );
                 if (!inventory_item) {
-                    message += ` ${-delta_item.count} more ${
-                        mcData.items[delta_item.id].name
-                    }, `;
+                    message += ` ${-delta_item.count} more ${mcData.items[delta_item.id].name
+                        }, `;
                 } else {
                     if (inventory_item.count < -delta_item.count) {
-                        message += `${
-                            -delta_item.count - inventory_item.count
-                        } more ${mcData.items[delta_item.id].name}`;
+                        message += `${-delta_item.count - inventory_item.count
+                            } more ${mcData.items[delta_item.id].name}`;
                     }
                 }
             }
         }
-        bot.chat(`I cannot make ${name} because I need: ${message}`);
+        report(`I cannot make ${name} because I need: ${message}`);
     }
 }

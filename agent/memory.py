@@ -18,8 +18,8 @@ class Memory:
         self.model_name = model_name
 
         # --- 配置参数 ---
-        self.level1_limit = 1       # Level 1 容量 (原汁原味的 Event)
-        self.consolidate_batch = 1  # 每积累多少条新 Event 触发一次 Level 2 重构
+        self.level1_limit = 50       # Level 1 容量 (原汁原味的 Event)
+        self.consolidate_batch = 50  # 每积累多少条新 Event 触发一次 Level 2 重构
         self.level2_limit = 500       # Level 2 最大保留条数 (Pruning 阈值)
         self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
 
@@ -50,7 +50,7 @@ class Memory:
         2. 加入 Level 1 (Deque)。
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
-        # 1. 过滤：code_run_request 包含大量代码，且通常紧接着 code_run_done，可以不记
+        # 1. 过滤：code_run_request 包含大量代码，且通常紧接着 code_run_result，可以不记
         if event.type == "code_run_request":
             return
 
@@ -216,8 +216,11 @@ class Memory:
                 else:
                     username = event.metadata.get('user', 'unknown')
                     messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
+
+            elif event.type == "code_run_request":
+                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
             
-            elif event.type == "code_run_done":
+            elif event.type == "code_run_result":
                 # 结果可以保留，作为近期操作的反馈
                 messages.append({"role": "system", "content": f"[Action Result] {event.content}"})
             
