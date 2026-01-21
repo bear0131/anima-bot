@@ -5,6 +5,133 @@ const WebSocket = require('ws');
 const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
 const puppeteer = require('puppeteer')
 
+// ============================================================
+//  全局错误处理 - 防止静默崩溃
+// ============================================================
+
+// 全局变量引用 (在 ws 初始化后会被赋值)
+let globalWs = null;
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n╔════════════════════════════════════════════════════════════╗');
+    console.error('║     UNHANDLED PROMISE REJECTION - 进程可能崩溃         ║');
+    console.error('╚════════════════════════════════════════════════════════════╝');
+    console.error('Promise:', promise);
+    console.error('Reason:', reason);
+    console.error('Message:', reason?.message || String(reason));
+    console.error('Stack:', reason?.stack || 'No stack trace available');
+    console.error('Timestamp:', new Date().toISOString());
+    console.error('══════════════════════════════════════════════════════════════\n');
+
+    // 发送错误到 WebSocket (如果连接存在)
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+        try {
+            globalWs.send(JSON.stringify({
+                source: 'minecraft',
+                type: 'critical_error',
+                content: {
+                    error_type: 'unhandledRejection',
+                    reason: reason?.message || String(reason),
+                    stack: reason?.stack,
+                    timestamp: new Date().toISOString()
+                },
+                metadata: {}
+            }));
+        } catch (sendErr) {
+            console.error('Failed to send error to WebSocket:', sendErr.message);
+        }
+    }
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('\n╔════════════════════════════════════════════════════════════╗');
+    console.error('║        UNCAUGHT EXCEPTION - 进程即将退出              ║');
+    console.error('╚════════════════════════════════════════════════════════════╝');
+    console.error('Error:', err.name);
+    console.error('Message:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('Timestamp:', new Date().toISOString());
+    console.error('══════════════════════════════════════════════════════════════\n');
+
+    // 发送错误到 WebSocket (如果连接存在)
+    if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+        try {
+            globalWs.send(JSON.stringify({
+                source: 'minecraft',
+                type: 'critical_error',
+                content: {
+                    error_type: 'uncaughtException',
+                    message: err.message,
+                    stack: err.stack,
+                    timestamp: new Date().toISOString()
+                },
+                metadata: {}
+            }));
+        } catch (sendErr) {
+            console.error('Failed to send error to WebSocket:', sendErr.message);
+        }
+    }
+
+    // 注意: 不退出进程,让错误处理继续
+    // 但严重错误可能导致进程不稳定,应该记录并重启
+});
+
+// 监控内存使用
+let memoryMonitorInterval;
+function startMemoryMonitoring() {
+    if (memoryMonitorInterval) {
+        clearInterval(memoryMonitorInterval);
+    }
+
+    memoryMonitorInterval = setInterval(() => {
+        const used = process.memoryUsage();
+        const rssMB = Math.round(used.rss / 1024 / 1024);
+        const heapMB = Math.round(used.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(used.heapTotal / 1024 / 1024);
+        const externalMB = Math.round(used.external / 1024 / 1024);
+
+        // 每5分钟输出一次内存状态
+        console.log(`[Memory Monitor] RSS: ${rssMB}MB | Heap: ${heapMB}MB/${heapTotalMB}MB | External: ${externalMB}MB`);
+
+        // 内存使用超过 2GB 时发出警告
+        if (used.rss > 2 * 1024 * 1024 * 1024) {
+            console.error('\n╔════════════════════════════════════════════════════════════╗');
+            console.error('║            WARNING: CRITICAL HIGH MEMORY USAGE           ║');
+            console.error('╚════════════════════════════════════════════════════════════╝');
+            console.error(`RSS: ${rssMB}MB exceeds 2GB threshold!`);
+            console.error(`Heap: ${heapMB}MB / ${heapTotalMB}MB`);
+            console.error(`External: ${externalMB}MB`);
+            console.error('This may lead to process crash or OOM!');
+            console.error('Consider restarting the bot.');
+            console.error('══════════════════════════════════════════════════════════════\n');
+
+            if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+                try {
+                    globalWs.send(JSON.stringify({
+                        source: 'minecraft',
+                        type: 'warning',
+                        content: {
+                            warning_type: 'high_memory',
+                            rss_mb: rssMB,
+                            heap_mb: heapMB,
+                            heap_total_mb: heapTotalMB,
+                            external_mb: externalMB,
+                            timestamp: new Date().toISOString()
+                        },
+                        metadata: {}
+                    }));
+                } catch (sendErr) {
+                    console.error('Failed to send warning to WebSocket:', sendErr.message);
+                }
+            }
+        }
+    }, 30000); // 每30秒检查一次
+}
+
+// ============================================================
+//  其他初始化
+// ============================================================
+
 // 解析命令行参数
 function parseArgs() {
     const args = process.argv.slice(2);
@@ -60,6 +187,12 @@ bot.loadPlugin(pvp);
 let isBotReady = false;
 
 const ws = new WebSocket('ws://localhost:8000/ws/minecraft');
+
+// 绑定 WebSocket 到全局变量,供错误处理器使用
+globalWs = ws;
+
+// 启动内存监控
+startMemoryMonitoring();
 
 let browser = null
 let page = null
