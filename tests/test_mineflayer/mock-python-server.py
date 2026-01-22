@@ -99,21 +99,18 @@ class AnimaBotTestServer:
                 user = data.get('user', 'system')
                 content = data.get('content', '')
                 print(f"{Colors.OKBLUE}[聊天]{Colors.ENDC} {Colors.BOLD}{user}{Colors.ENDC}: {content}")
-            elif msg_type == 'execution_done':
-                status = data.get('status')
-                if status == 'success':
-                    print_success("代码执行成功")
-                    state = data.get('state')
-                    if state:
-                        print(f"  状态: {json.dumps(state, ensure_ascii=False)[:100]}")
-                else:
-                    error = data.get('error', 'Unknown error')
+            elif msg_type == 'code_run_result':
+                error = data.get('error')
+                if error:
                     print_error(f"代码执行失败: {error}")
-                    stack = data.get('stack')
-                    if stack:
-                        print(f"  堆栈: {stack[:200]}...")
+                else:
+                    print_success("代码执行成功")
+                    content = data.get('content', '')
+                    if content:
+                        print(f"  输出: {content[:200]}")
             else:
-                print(f"{Colors.OKCYAN}[{msg_type}]{Colors.ENDC} {json.dumps(data, ensure_ascii=False)[:100]}")
+                pass
+                # print(f"{Colors.OKCYAN}[{msg_type}]{Colors.ENDC} {json.dumps(data, ensure_ascii=False)[:100]}")
         else:
             print(f"{Colors.WARNING}[其他]{Colors.ENDC} {json.dumps(data, ensure_ascii=False)[:100]}")
 
