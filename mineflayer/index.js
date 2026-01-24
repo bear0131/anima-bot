@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const WebSocket = require('ws');
@@ -72,8 +71,49 @@ process.on('uncaughtException', (err) => {
         }
     }
 
-    // 注意: 不退出进程,让错误处理继续
-    // 但严重错误可能导致进程不稳定,应该记录并重启
+    // 退出进程以触发 Python 端重启
+    console.error('[JS] Exiting due to uncaught exception...');
+    process.exit(1);
+});
+
+// ============================================================
+//  优雅退出处理 - 响应 Python 端的终止信号
+// ============================================================
+
+process.on('SIGTERM', async () => {
+    console.log('[JS] Received SIGTERM, shutting down gracefully...');
+
+    try {
+        // 关闭 Puppeteer browser
+        if (browser) {
+            console.log('[JS] Closing browser...');
+            await browser.close();
+        }
+
+        // 关闭 WebSocket 连接
+        if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+            console.log('[JS] Closing WebSocket...');
+            globalWs.close();
+        }
+
+        // 退出 Minecraft bot
+        if (bot) {
+            console.log('[JS] Quitting bot...');
+            bot.quit();
+        }
+
+        console.log('[JS] Graceful shutdown complete');
+        process.exit(0);
+    } catch (err) {
+        console.error('[JS] Error during shutdown:', err);
+        process.exit(1);
+    }
+});
+
+process.on('SIGINT', async () => {
+    console.log('[JS] Received SIGINT, shutting down...');
+    // 同 SIGTERM 处理
+    process.emit('SIGTERM');
 });
 
 // 监控内存使用
@@ -448,8 +488,8 @@ ws.on('message', async (data) => {
                 content: e.stack
             }));
         } finally {
-            // 清理监听器，防止内存泄漏或逻辑冲突
-            bot.removeListener("physicsTick", onTick);
+            // // 清理监听器，防止内存泄漏或逻辑冲突
+            // bot.removeListener("physicsTick", onTick);
         }
     }
 });
@@ -462,5 +502,21 @@ bot.on('chat', (username, message) => {
     }
 });
 
-bot.on('error', err => console.log('Bot Error:', err));
-bot.on('kicked', reason => console.log('Bot Kicked:', reason));
+bot.on('error', err => {
+    console.error('[JS] Bot Error:', err);
+    // 严重错误时退出，让 Python 端重启
+    if (err.message && (
+        err.message.includes('ETIMEDOUT') ||
+        err.message.includes('ECONNREFUSED') ||
+        err.message.includes('Handshake')
+    )) {
+        console.error('[JS] Fatal bot error, exiting...');
+        process.exit(1);
+    }
+});
+bot.on('kicked', reason => {
+    console.error('[JS] Bot Kicked:', reason);
+    // 被踢出时退出
+    console.error('[JS] Bot was kicked, exiting...');
+    process.exit(1);
+});

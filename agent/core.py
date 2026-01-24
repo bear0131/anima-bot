@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import uvicorn
 from interfaces import server
 from interfaces.protocol import IncomingEvent, OutgoingCommand
+from interfaces.js_process_manager import JSProcessManager
 from agent.main_agent import MainAgent
 from agent.schema import Event, AgentState
 from agent.memory import Memory
@@ -34,22 +35,57 @@ class Agent:
             model_name=self.memory_model
         )
         self.main_agent = MainAgent()
+
+        # 初始化 JS 进程管理器
+        # 从环境变量读取命令行参数
+        js_extra_args = []
+        if os.getenv("HEADLESS") == "false":
+            js_extra_args.append("--headless=false")
+        if os.getenv("PRISMARINE_VIEWER") == "false":
+            js_extra_args.append("--prismarine_viewer=false")
+
+        self.js_manager = JSProcessManager(extra_args=js_extra_args)
         
     async def start(self):
         # 启动 Server (作为一个后台 Task)
         # 注意：这里使用 uvicorn 的配置来在 asyncio 循环里跑
         config = uvicorn.Config(server.app, host="0.0.0.0", port=8000, log_level="info")
         server_instance = uvicorn.Server(config)
-        server_task = asyncio.create_task(server_instance.serve())
-        
-        print("Agent Core Started. Waiting for events...")
-        
+        asyncio.create_task(server_instance.serve())
+
+        print("Agent Core Started. Starting JS process...")
+
+        # 启动 JS 进程
+        await self.js_manager.start()
+
+        # 等待 JS 端就绪
+        ready = await self.js_manager.wait_until_ready(timeout=60)
+        if not ready:
+            print("[Agent] JS process failed to become ready, shutting down")
+            await self.js_manager.stop()
+            return
+
+        print("[Agent] JS process ready. Starting main loop...")
+
         # 启动主循环
-        await self.main_loop()
+        try:
+            await self.main_loop()
+        finally:
+            # 清理 JS 进程
+            await self.js_manager.cleanup()
 
     async def main_loop(self):
         while True:
-            incoming_event = await self.event_queue.get()
+            try:
+                # 缩短一点超时时间，或者直接等待
+                incoming_event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                # 只要检查是否活着，打印日志即可，不要干预
+                # 如果 JSProcessManager 正在重启中，is_alive 也是 False，这是正常的
+                if not await self.js_manager.is_alive():
+                    #TODO 可以检查一下 server 是否有连接，确认是不是真的断了很久
+                    pass 
+                continue
 
             # print(f"[Core] Received: {incoming_event.type}")
 

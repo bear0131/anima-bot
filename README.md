@@ -6,13 +6,14 @@ LLM-powered Minecraft bot using Python for decision-making and Node.js/Mineflaye
 
 ```
 ┌─────────────────┐    WebSocket    ┌──────────────────┐
-│   Python Brain  │ ◄─────────────► │  Minecraft Bot   │
-│  (LLM Control)  │                 │   (Mineflayer)   │
-└─────────────────┘                 └──────────────────┘
+│   Python Agent  │ ◄─────────────► │  Minecraft Bot   │
+│  (LLM Brain)    │                 │   (Mineflayer)   │
+│                 │      spawns     │                  │
+└─────────────────┘────────────────►└──────────────────┘
        Port 8000                           Game Server
 ```
 
-- **Python Agent**: FastAPI server + LLM brain that makes decisions
+- **Python Agent**: Manages the entire system, starts the Node.js bot, runs LLM brain for decision-making
 - **Node.js Bot**: Mineflayer bot that executes commands in Minecraft
 - **Communication**: WebSocket connection between Python and Node.js
 
@@ -66,23 +67,25 @@ CODING_MODEL_NAME=Qwen3-Coder-Plus
 PROMPT_PATH=agent/prompts
 
 MEMORY_MODEL_NAME=Qwen3-VL-30B-A3B-Instruct
+
+# Bot Display Configuration
+# Puppeteer 以无头模式运行（默认，无需设置）
+# HEADLESS=false  # 设置为 false 显示 bot 看到的截图
+
+# 禁用 prismarine-viewer（截图功能）
+PRISMARINE_VIEWER=false
 ```
 
 ## Running
 
-You need two terminal windows:
+Start the bot (Python will automatically start the Node.js bot):
 
-**Terminal 1 - Start the Python brain:**
 ```bash
 python -m agent.core
 ```
 
-**Terminal 2 - Start the Minecraft bot:**
-```bash
-node mineflayer/index.js
-```
-
-> 使用 `node mineflayer/index.js --headless=false` 来启动调试显示 bot 看到的截图。
+> 设置 `HEADLESS=false` 来显示 bot 看到的截图窗口
+> 设置 `PRISMARINE_VIEWER=true` 启用截图功能（需要安装 canvas 依赖）
 
 ## Project Structure
 
@@ -138,9 +141,11 @@ self.caps = [
 
 **Bot fails to connect**: Check `MINECRAFT_HOST` and `MINECRAFT_PORT` in `.env`
 
-**WebSocket connection fails**: Ensure Python agent is running before starting the Mineflayer bot
-
 **LLM errors**: Verify `OPENAI_API_KEY` and `OPENAI_BASE_URL` are correct
+
+**Node.js bot doesn't start**: Make sure Node.js dependencies are installed (`cd mineflayer && npm install`)
+
+**Display/screenshot issues**: Check `HEADLESS` and `PRISMARINE_VIEWER` settings in `.env`
 
 ## License
 
