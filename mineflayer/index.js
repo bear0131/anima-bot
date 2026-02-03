@@ -248,7 +248,11 @@ bot.once('spawn', async () => {
 
     if (enablePrismarineViewer) {
         // 启动 Viewer (Web服务器)
-        mineflayerViewer(bot, { port: 3007, firstPerson: true });
+        mineflayerViewer(bot, { 
+            port: 3007,
+            firstPerson: true,
+            viewDistance: 12,
+        });
         console.log('Viewer started on port 3007');
 
         try {

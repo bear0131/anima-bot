@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import time  # [新增] 引入 time 模块
 from openai import AsyncOpenAI
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from dotenv import load_dotenv
@@ -26,28 +27,22 @@ class MainAgent:
     async def think_stream(self, memory: Memory) -> AsyncGenerator[Dict[str, Any], None]:
         """
         主思考单次调用：
-        1. 从 memory 渲染完整上下文（包括历史对话、游戏状态等）
-        2. 调用 LLM，支持 tool calls
-        3. 如果有 tool call，调用 coding tool 并 yield code run request，然后立即返回
-        4. 如果有文本回复，yield 后继续
-        5. 不再进行多轮循环，每次调用只处理一次 LLM 响应
-
-        注意：不再假设 last_event 一定是 chat 事件，
-        调用方需要在需要时将事件添加到 memory 中
+        1. 从 memory 渲染完整上下文
+        2. 调用 LLM (带计时)
+        3. 处理 tool calls 或 文本回复
         """
         # 构建初始上下文：system prompt + 历史（不含图片）
         conversation_context = [{"role": "system", "content": self.chat_system_prompt}]
-        history_messages = memory.render_llm_context(include_image=False)
+        history_messages = memory.render_llm_context(include_image=True)
         conversation_context.extend(history_messages)
 
-        # 如果 last_event 是 chat 且还未在 history 中，需要手动添加
-        # render_llm_context 已经处理了 level1_events 中的 chat，所以通常不需要额外处理
+        # 检查 last_event (逻辑保持不变)
         last_event = memory.get_last_event()
         if last_event and last_event.type == "chat":
-            # 检查这个 chat 事件是否已经在 history 中了
-            # level1_events 包含所有短期事件，render_llm_context 会处理它们
-            # 所以这里我们不需要额外添加
             pass
+
+        # [新增] 1. 开始计时
+        start_time = time.time()
 
         # 调用 LLM（单次调用，不循环）
         response = await self.client.chat.completions.create(
@@ -58,9 +53,13 @@ class MainAgent:
             max_tokens=2000,
         )
 
+        # [新增] 2. 结束计时并计算延迟
+        end_time = time.time()
+        latency = end_time - start_time
+
         message = response.choices[0].message
         print(f"\n{'='*60}")
-        print(f"[Main Agent] 🤖 LLM 响应:")
+        print(f"[Main Agent] 🤖 LLM 响应 (耗时: {latency:.2f}s):") # [修改] 打印耗时
         if message.content:
             print(f"  📝 文本回复: {message.content}")
         if message.tool_calls:
@@ -73,7 +72,7 @@ class MainAgent:
         if message.content:
             yield {
                 "type": "chat",
-                "content": message.content
+                "content": message.content,
             }
 
         # 检查是否有 tool calls
@@ -95,18 +94,17 @@ class MainAgent:
                         task_description=task_description,
                         memory=memory
                     )
+                    
+                    # [可选] 如果你也想在代码生成的返回中包含之前的 LLM 思考延迟，可以加进去
+                    # code_result["llm_latency"] = latency 
 
                     # yield code run request
                     yield code_result
 
             # 注意：这里不再继续调用 LLM，直接返回
-            # 下次调用时，memory 中已经有了 code_run_request 事件
-            # 调用方（core）需要在收到 code_run_result 后再次调用 think_stream
 
     def _get_tools_definition(self) -> List[Dict[str, Any]]:
-        """
-        定义可用的工具
-        """
+        # ... (保持不变)
         return [
             {
                 "type": "function",

@@ -5,6 +5,7 @@ import asyncio
 import time
 from datetime import datetime
 import dotenv
+import os
 
 from agent.schema import Event, AgentState, MemoryNode
 
@@ -20,7 +21,7 @@ class Memory:
         # --- 配置参数 ---
         self.level1_limit = 50       # Level 1 容量 (原汁原味的 Event)
         self.consolidate_batch = 50  # 每积累多少条新 Event 触发一次 Level 2 重构
-        self.level2_limit = 500       # Level 2 最大保留条数 (Pruning 阈值)
+        self.level2_limit = 150       # Level 2 最大保留条数 (Pruning 阈值)
         self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
 
         # --- Level 1: 短期工作记忆 ---
@@ -92,16 +93,22 @@ class Memory:
             
             # A. 系统指令 (System Prompt) - 只有指令和格式
             system_instruction = """
-            You are the memory manager for a Minecraft Bot.
+            You are the objective memory archivist for a Minecraft Bot.
             
-            ### Task:
-            1. **Absorb**: Read the Recent Events and update the Knowledge Base.
-            2. **Summarize**: Create new memory nodes for new facts. Merge similar nodes.
-            3. **Update**: If a recent event contradicts old memory, update the old memory.
-            4. **Evaluate**: Assign an 'importance' score (0-100) to each node.
-            
-            ### Output Format:
-            Return ONLY a JSON list of objects: [{"content": "...", "importance": 85}]
+            ### CORE OBJECTIVES:
+            1. **CHAT**: Retain key user instructions and conversation context.
+            2. **NON-CHAT** (Actions/Logs): Record ONLY factual states with future utility. 
+               - **NO EVALUATIONS**: DO NOT use subjective adjectives (e.g., "excellent", "failed", "smart", "good"). DO NOT interpret capabilities (e.g., never write "Bot showed replaceability"). 
+               - **FACTS ONLY**: Write exactly what happened (e.g., "Crafted a diamond sword", "Found a village at 100,200", "Died by Zombie").
+            3. **MERGE**: Aggressively collapse repetitive events into a single entry. 
+               - Bad: [Node 1: Mined iron, Node 2: Mined iron]
+               - Good: [Node 1: Mined iron deposits]
+            4. **PRUNE**: Discard routine navigation logs or temporary errors unless they indicate a permanent blocker.
+
+            ### FORMAT RULES:
+            - **Style**: Use concise, telegraphic English (Subject-Verb-Object).
+            - **Output**: Return strictly valid JSON with no markdown formatting.
+            - **Structure**: {"memories": [{"content": "string", "importance": 0-100}]}
             """
 
             # B. 用户数据 (User Prompt) - 只有数据
@@ -232,8 +239,25 @@ class Memory:
         # --- 游戏状态 (保持不变) ---
         messages.append({"role": "system", "content": self.render_state_for_prompt()})
 
+        # =================================================================================
+        # 🟢 [新增] 调试输出：在添加图片前打印纯文本 Context
+        # =================================================================================
+        if os.getenv("DEBUG_LLM_CONTEXT", "false").lower() == "true":
+            print("\n" + "="*50)
+            print("🔍 [DEBUG] LLM Context Messages (Pre-Visual):")
+            # 使用 json.dumps 格式化打印，方便查看结构
+            try:
+                print(json.dumps(messages, ensure_ascii=False, indent=2))
+            except Exception as e:
+                print(f"Error printing debug context: {e}")
+                print(messages)
+            print("="*50 + "\n")
+        # =================================================================================
+
+
         # --- 视觉 (保持不变) ---
         if include_image and self.state.last_screenshot:
+            print("add image!")
             messages.append({
                 "role": "user", 
                 "content": [
