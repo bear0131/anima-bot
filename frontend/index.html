@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anima Bot Control Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Anima Bot Control Panel</h1>
+            <div class="connection-status" id="connection-status">
+                <span class="status-dot"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- 状态面板 -->
+            <section class="panel status-panel">
+                <h2>Agent Status</h2>
+
+                <div class="status-group">
+                    <h3>Basic Info</h3>
+                    <div class="stat-row">
+                        <span class="label">Status:</span>
+                        <span id="agent-status" class="value">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Position:</span>
+                        <span id="position" class="value">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Biome:</span>
+                        <span id="biome" class="value">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Time:</span>
+                        <span id="time-of-day" class="value">-</span>
+                    </div>
+                </div>
+
+                <div class="status-group">
+                    <h3>Health & Hunger</h3>
+                    <div class="stat-row">
+                        <span class="label">Health:</span>
+                        <div class="bar-container">
+                            <div class="bar health-bar" id="health-bar">
+                                <span id="health-value">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-row">
+                        <span class="label">Hunger:</span>
+                        <div class="bar-container">
+                            <div class="bar hunger-bar" id="hunger-bar">
+                                <span id="hunger-value">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status-group">
+                    <h3>Screenshot</h3>
+                    <div class="screenshot-container">
+                        <img id="screenshot" alt="Game View" />
+                    </div>
+                </div>
+            </section>
+
+            <!-- 背包面板 -->
+            <section class="panel inventory-panel">
+                <h2>Inventory</h2>
+                <div id="inventory-list" class="inventory-list">
+                    <p class="empty-state">No items</p>
+                </div>
+            </section>
+
+            <!-- 周围环境 -->
+            <section class="panel environment-panel">
+                <h2>Environment</h2>
+                <div class="status-group">
+                    <h3>Nearby Blocks</h3>
+                    <div id="nearby-blocks" class="tags-container">-</div>
+                </div>
+                <div class="status-group">
+                    <h3>Nearby Entities</h3>
+                    <div id="nearby-entities" class="tags-container">-</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- 日志面板 -->
+        <section class="panel log-panel">
+            <div class="log-header">
+                <h2>Logs</h2>
+                <div class="log-controls">
+                    <select id="log-level-filter">
+                        <option value="all">All Levels</option>
+                        <option value="ERROR">Errors Only</option>
+                        <option value="INFO">Info & Above</option>
+                        <option value="DEBUG">Debug & Above</option>
+                    </select>
+                    <button onclick="clearLogs()">Clear</button>
+                    <label class="auto-scroll-checkbox">
+                        <input type="checkbox" id="auto-scroll" checked>
+                        Auto-scroll
+                    </label>
+                </div>
+            </div>
+            <div id="log-container" class="log-container"></div>
+        </section>
+
+        <!-- LLM 请求面板 -->
+        <section class="panel llm-panel">
+            <div class="log-header">
+                <h2>LLM Requests</h2>
+                <button onclick="refreshLLMRequests()">Refresh</button>
+            </div>
+            <div id="llm-requests-container" class="llm-requests-container">
+                <p class="empty-state">No requests yet</p>
+            </div>
+        </section>
+
+        <!-- 控制面板 -->
+        <section class="panel control-panel">
+            <h2>Commands</h2>
+
+            <div class="command-group">
+                <h3>Quick Actions</h3>
+                <div class="button-grid">
+                    <button onclick="toggleCamera()">Toggle Camera</button>
+                    <button onclick="requestObservation()">Refresh Status</button>
+                </div>
+            </div>
+
+            <div class="command-group">
+                <h3>Send Chat</h3>
+                <div class="input-group">
+                    <input type="text" id="chat-input" placeholder="Type a message..." />
+                    <button onclick="sendChat()">Send</button>
+                </div>
+            </div>
+
+            <div class="command-group">
+                <h3>Execute Code</h3>
+                <textarea id="code-input" placeholder="// JavaScript code to execute..." rows="4"></textarea>
+                <button onclick="executeCode()">Run Code</button>
+            </div>
+        </section>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

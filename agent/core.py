@@ -8,9 +8,12 @@ from interfaces.js_process_manager import JSProcessManager
 from agent.main_agent import MainAgent
 from agent.schema import Event, AgentState
 from agent.memory import Memory
+from agent.logger import get_logger
 from openai import AsyncOpenAI
 
 load_dotenv()
+
+logger = get_logger("core")
 
 class Agent:
     def __init__(self):
@@ -18,6 +21,8 @@ class Agent:
         self.event_queue = asyncio.Queue()
         # 把队列挂载到 Server 模块上
         server.set_queue(self.event_queue)
+
+        self.agent_state = AgentState()
 
         self.agent_state = AgentState()
         self.llm_client = AsyncOpenAI(
@@ -45,15 +50,19 @@ class Agent:
             js_extra_args.append("--prismarine_viewer=false")
 
         self.js_manager = JSProcessManager(extra_args=js_extra_args)
+
+        # 注册全局状态供 API 访问
+        server.set_agent_state(self.agent_state)
+        logger.info("Global agent_state registered")
         
     async def start(self):
         # 启动 Server (作为一个后台 Task)
         # 注意：这里使用 uvicorn 的配置来在 asyncio 循环里跑
-        config = uvicorn.Config(server.app, host="0.0.0.0", port=8000, log_level="info")
+        config = uvicorn.Config(server.app, host="0.0.0.0", port=8000, log_level="warning")
         server_instance = uvicorn.Server(config)
         asyncio.create_task(server_instance.serve())
 
-        print("Agent Core Started. Starting JS process...")
+        logger.info("Agent Core Started. Starting JS process...")
 
         # 启动 JS 进程
         await self.js_manager.start()
@@ -61,11 +70,11 @@ class Agent:
         # 等待 JS 端就绪
         ready = await self.js_manager.wait_until_ready(timeout=60)
         if not ready:
-            print("[Agent] JS process failed to become ready, shutting down")
+            logger.error("JS process failed to become ready, shutting down")
             await self.js_manager.stop()
             return
 
-        print("[Agent] JS process ready. Starting main loop...")
+        logger.info("JS process ready. Starting main loop...")
 
         # 启动主循环
         try:
@@ -106,30 +115,26 @@ class Agent:
             elif event.type == 'chat':
                 # 1. 将 chat 事件加入 memory
                 self.memory.add_event(event)
-                print(f"\n{'='*60}")
-                print(f"[Core] 📥 收到聊天事件: {event.content}")
-                print(f"{'='*60}")
+                logger.info(f"📥 收到聊天事件: {event.content}")
                 # 2. 调用 main_agent 处理
                 async for decision in self.main_agent.think_stream(self.memory):
-                    print(f"[Core] 📤 决策: {decision['type']} - {decision.get('content', '')[:100]}")
+                    logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
                     await self.execute_decision(decision)
 
             elif event.type == 'code_run_result':
                 # 1. 构建结果描述
-                print(f"\n{'='*60}")
                 if incoming_event.error:
                     result_desc = f"代码执行失败: {incoming_event.error}"
                     if incoming_event.content:
                         result_desc += f"\n错误详情:\n{incoming_event.content}"
-                    print(f"[Core] ❌ 代码执行失败: {incoming_event.error}")
+                    logger.error(f"❌ 代码执行失败: {incoming_event.error}")
                 else:
                     result_desc = f"代码执行成功!"
                     if incoming_event.content:
                         result_desc += f"\n返回结果:\n{incoming_event.content}"
-                    print(f"[Core] ✅ 代码执行成功")
+                    logger.info("✅ 代码执行成功")
                     if incoming_event.content:
-                        print(f"[Core] 📄 返回内容:\n{incoming_event.content}")
-                print(f"{'='*60}\n")
+                        logger.debug(f"📄 返回内容:\n{incoming_event.content}")
 
                 # 2. 更新 event content 为可读的描述
                 event.content = result_desc
@@ -140,7 +145,7 @@ class Agent:
                 # 4. 调用 main_agent 继续思考（基于执行结果）
                 # 此时 last_event 是 code_run_result，main_agent 需要能处理这种情况
                 async for decision in self.main_agent.think_stream(self.memory):
-                    print(f"[Core] 📤 决策: {decision['type']} - {decision.get('content', '')[:100]}")
+                    logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
                     await self.execute_decision(decision)
 
             self.event_queue.task_done()
@@ -154,7 +159,7 @@ class Agent:
         ))
 
     async def execute_decision(self, decision):
-        print(f"[Exec] Doing: {decision}")
+        logger.debug(f"Executing: {decision['type']}")
 
         cmd = OutgoingCommand(
             type=decision['type'],

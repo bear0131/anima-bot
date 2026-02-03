@@ -1,7 +1,8 @@
 import asyncio
 import json
 import os
-import time  # [新增] 引入 time 模块
+import time
+import uuid
 from openai import AsyncOpenAI
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from dotenv import load_dotenv
@@ -10,7 +11,17 @@ from agent.tools.coding_tool import CodingTool
 
 load_dotenv()
 
+# 模块级全局变量：存储最近的 LLM 请求（避免类重新定义时丢失数据）
+_llm_requests: List[Dict] = []
+_max_requests: int = 20
+
+def get_llm_requests() -> List[Dict]:
+    """获取 LLM 请求历史（全局函数）"""
+    return _llm_requests.copy()
+
 class MainAgent:
+    _max_requests = 20  # 保留类变量用于实例访问
+
     def __init__(self):
         # 加载 chat prompt
         prompts_dir = "agent/prompts"
@@ -23,6 +34,44 @@ class MainAgent:
         )
         self.chat_model = os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
         self.coding_tool = CodingTool()
+
+    def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
+        """保存 LLM 请求到历史记录"""
+        global _llm_requests
+        request_id = str(uuid.uuid4())
+
+        try:
+            # 格式化响应
+            formatted_response = {
+                "content": response.choices[0].message.content or "",
+                "tool_calls": []
+            }
+            if response.choices[0].message.tool_calls:
+                for tc in response.choices[0].message.tool_calls:
+                    formatted_response["tool_calls"].append({
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
+                    })
+
+            request_data = {
+                "id": request_id,
+                "timestamp": time.time(),
+                "model": self.chat_model,
+                "messages": messages,
+                "response": formatted_response,
+                "latency": latency
+            }
+
+            # 添加到列表开头
+            _llm_requests.insert(0, request_data)
+
+            # 限制数量
+            if len(_llm_requests) > _max_requests:
+                _llm_requests.pop()
+        except Exception as e:
+            print(f"[ERROR] Failed to save LLM request: {e}")
+            import traceback
+            traceback.print_exc()
 
     async def think_stream(self, memory: Memory) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -53,9 +102,12 @@ class MainAgent:
             max_tokens=2000,
         )
 
-        # [新增] 2. 结束计时并计算延迟
+        # 结束计时并计算延迟
         end_time = time.time()
         latency = end_time - start_time
+
+        # 保存 LLM 请求记录
+        self._save_llm_request(conversation_context, response, latency)
 
         message = response.choices[0].message
         print(f"\n{'='*60}")
