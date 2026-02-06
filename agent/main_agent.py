@@ -3,11 +3,13 @@ import json
 import os
 import time
 import uuid
+import openai
 from openai import AsyncOpenAI
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from dotenv import load_dotenv
 from agent.memory import Memory
 from agent.tools.coding_tool import CodingTool
+from agent.clean_content import remove_think_tags
 
 load_dotenv()
 
@@ -29,10 +31,10 @@ class MainAgent:
             self.chat_system_prompt = f.read()
 
         self.client = AsyncOpenAI(
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url="https://api.iew.cc/v1",#os.getenv("OPENAI_BASE_URL"),
+            api_key="sk-ndfs4You2i4a3O74jzViME4KU3KBOZb0qRdrJsDDUfAX7HBP",#os.getenv("OPENAI_API_KEY"),
         )
-        self.chat_model = os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
+        self.chat_model = "gemini-2.5-pro"#os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
         self.coding_tool = CodingTool()
 
     def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
@@ -94,13 +96,45 @@ class MainAgent:
         start_time = time.time()
 
         # 调用 LLM（单次调用，不循环）
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=conversation_context,
-            tools=self._get_tools_definition(),
-            temperature=0.8,
-            max_tokens=2000,
-        )
+
+        max_retries = 3
+        retry_delay = 5 # 秒
+
+        print(f"messages: {conversation_context[:-1]}")
+        for attempt in range(max_retries):
+            try:
+                # === 原有的 API 调用代码 ===
+                response = await self.client.chat.completions.create(
+                    model=self.chat_model,
+                    messages=conversation_context,
+                    tools=self._get_tools_definition(),
+                    temperature=0.8,
+                    max_tokens=10000,
+                )
+                break
+                # =========================
+
+            except openai.InternalServerError as e:
+                error_msg = str(e)
+                # 检测是不是 "正在加载" 这种错误
+                if "正在加载" in error_msg or "Loading" in error_msg:
+                    print(f"⚠️ 模型正在加载中 (Attempt {attempt+1}/{max_retries})... 等待 {retry_delay} 秒后重试")
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2 # 指数退避，下次多等一会
+                else:
+                    # 如果是其他严重的服务器错误，也建议重试几次
+                    print(f"⚠️ 服务器内部错误 (500): {e} - Retrying...")
+                    await asyncio.sleep(retry_delay)
+            
+            except openai.APIConnectionError as e:
+                print(f"⚠️ 网络连接错误: {e} - Retrying...")
+                await asyncio.sleep(retry_delay)
+
+            except Exception as e:
+                # 其他未预料的错误，直接抛出，不重试
+                print(f"❌ 严重错误: {e}")
+                raise e
+        
 
         # 结束计时并计算延迟
         end_time = time.time()
@@ -113,7 +147,7 @@ class MainAgent:
         print(f"\n{'='*60}")
         print(f"[Main Agent] 🤖 LLM 响应 (耗时: {latency:.2f}s):") # [修改] 打印耗时
         if message.content:
-            print(f"  📝 文本回复: {message.content}")
+            print(f"  📝 文本回复: {remove_think_tags(message.content)}")
         if message.tool_calls:
             print(f"  🔧 工具调用: {len(message.tool_calls)} 个")
             for tc in message.tool_calls:
@@ -124,7 +158,7 @@ class MainAgent:
         if message.content:
             yield {
                 "type": "chat",
-                "content": message.content,
+                "content": remove_think_tags(message.content),
             }
 
         # 检查是否有 tool calls
@@ -142,6 +176,7 @@ class MainAgent:
                         task_description = last_event.content if last_event else ""
 
                     # 调用 coding tool
+                    print(f"calling task: {task_description}")
                     code_result = await self.coding_tool.generate_code(
                         task_description=task_description,
                         memory=memory

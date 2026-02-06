@@ -3,6 +3,7 @@ import json
 from openai import AsyncOpenAI
 from typing import Dict, Any
 from agent.memory import Memory
+from agent.clean_content import remove_think_tags
 
 class CodingTool:
     """
@@ -79,8 +80,10 @@ class CodingTool:
             temperature=0.0,
         )
 
+        print(f"response: {response}")
+
         try:
-            result_json = json.loads(response.choices[0].message.content)
+            result_json = json.loads(remove_think_tags(response.choices[0].message.content))
             code = result_json.get("code", "")
             plan = result_json.get("plan", "")
         except Exception as e:

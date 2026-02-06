@@ -239,27 +239,11 @@ class Memory:
         # --- 游戏状态 (保持不变) ---
         messages.append({"role": "system", "content": self.render_state_for_prompt()})
 
-        # =================================================================================
-        # 🟢 [新增] 调试输出：在添加图片前打印纯文本 Context
-        # =================================================================================
-        if os.getenv("DEBUG_LLM_CONTEXT", "false").lower() == "true":
-            print("\n" + "="*50)
-            print("🔍 [DEBUG] LLM Context Messages (Pre-Visual):")
-            # 使用 json.dumps 格式化打印，方便查看结构
-            try:
-                print(json.dumps(messages, ensure_ascii=False, indent=2))
-            except Exception as e:
-                print(f"Error printing debug context: {e}")
-                print(messages)
-            print("="*50 + "\n")
-        # =================================================================================
-
-
         # --- 视觉 (保持不变) ---
         if include_image and self.state.last_screenshot:
             print("add image!")
             messages.append({
-                "role": "user", 
+                "role": "system",
                 "content": [
                     {"type": "text", "text": "Current View:"},
                     {"type": "image_url", "image_url": {
