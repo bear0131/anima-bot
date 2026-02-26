@@ -31,7 +31,7 @@ class Agent:
         )
 
         # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
-        self.memory_model = os.getenv("MEMORY_MODEL_NAME", "Qwen3-VL-30B-A3B-Instruct")
+        self.memory_model = os.getenv("MEMORY_MODEL_NAME")
 
         # 3. 初始化 Memory (传入刚创建的 client 和模型名)
         self.memory = Memory(

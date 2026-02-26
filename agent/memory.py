@@ -131,8 +131,8 @@ class Memory:
                 response = await self.llm_client.chat.completions.create(
                     model=self.model_name,
                     messages=[
-                        {"role": "system", "content": system_instruction},
-                        {"role": "user", "content": user_data} # <--- 这里加上了 user 消息，解决了报错
+                        # Gemini 建议将 System Instruction 放在第一条 User 消息中，或者使用专门的参数
+                        {"role": "user", "content": f"SYSTEM: {system_instruction}\n\nDATA: {user_data}"}
                     ],
                     response_format={"type": "json_object"} 
                 )
@@ -198,60 +198,61 @@ class Memory:
                 print(f"❌ Memory consolidation failed: {e}")
 
     def render_llm_context(self, include_image=True) -> List[Dict]:
-        """
-        渲染 Context 给 Chat LLM。
-        结构：Level 2 (Summary) -> Level 1 (Raw Events) -> MC State
-        """
         messages = []
 
-        # --- 层级 2: 长期语义记忆 (精炼后的知识) ---
+        # --- 1. Level 2 记忆 (原本是 System) ---
         if self.level2_nodes:
-            # 按重要性排序展示
             sorted_nodes = sorted(self.level2_nodes, key=lambda x: x.importance, reverse=True)
             memory_text = "### 🧠 Long-term Knowledge (Summarized)\n"
             for node in sorted_nodes:
                 memory_text += f"- {node.content} (Imp: {node.importance})\n"
-            print("memory text: ", memory_text)
-            messages.append({"role": "system", "content": memory_text})
+            # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
+            messages.append({"role": "user", "content": memory_text})
 
-        # --- 层级 1: 短期工作记忆 (原始 Event 流) ---
-        # 这里不需要 System 前缀，直接当作对话历史
+        # --- 2. Level 1 事件流 ---
         for event in self.level1_events:
             if event.type == "chat":
                 if event.source == 'bot':
-                    messages.append({"role": "assistant", "content": event.content})
+                    # 转化规则：assistant -> model
+                    messages.append({"role": "model", "content": event.content})
                 else:
+                    # 转化规则：user -> user
                     username = event.metadata.get('user', 'unknown')
                     messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
 
             elif event.type == "code_run_request":
-                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
+                # 转化规则：assistant -> model
+                messages.append({"role": "model", "content": f"[Action Start] {event.content}"})
             
-            elif event.type == "code_run_result":
-                # 结果可以保留，作为近期操作的反馈
-                messages.append({"role": "system", "content": f"[Action Result] {event.content}"})
-            
-            elif event.type == "error":
-                messages.append({"role": "system", "content": f"[Error] {event.content}"})
-            
-            # code_run_request 已经被 filter 掉了，不会出现在这里
+            elif event.type in ["code_run_result", "error"]:
+                # 转化规则：原本的 system -> user (环境反馈)
+                messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
 
-        # --- 游戏状态 (保持不变) ---
-        messages.append({"role": "system", "content": self.render_state_for_prompt()})
+        # --- 3. 游戏状态 (原本是 System) ---
+        # 转化规则：并入最后一条 User 消息
+        state_prompt = self.render_state_for_prompt()
+        
+        # 检查最后一条消息是否为 user，如果是则合并，如果不是则新建
+        if messages and messages[-1]["role"] == "user":
+            messages[-1]["content"] += f"\n{state_prompt}"
+        else:
+            messages.append({"role": "user", "content": state_prompt})
 
-        # --- 视觉 (保持不变) ---
+        # --- 4. 图像内容 ---
         if include_image and self.state.last_screenshot:
-            print("add image!")
-            messages.append({
-                "role": "system",
+            # Gemini 视觉通常附加在 user 消息的 parts 中
+            # 如果你保持 OpenAI 兼容格式，只需确保 role 是 user
+            img_msg = {
+                "role": "user", 
                 "content": [
                     {"type": "text", "text": "Current View:"},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:image/jpeg;base64,{self.state.last_screenshot}",
-                        "detail": "low"
-                    }}
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{self.state.last_screenshot}"}
+                    }
                 ]
-            })
+            }
+            messages.append(img_msg)
 
         return messages
 

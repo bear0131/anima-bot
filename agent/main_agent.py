@@ -31,10 +31,10 @@ class MainAgent:
             self.chat_system_prompt = f.read()
 
         self.client = AsyncOpenAI(
-            base_url="https://api.iew.cc/v1",#os.getenv("OPENAI_BASE_URL"),
-            api_key="sk-ndfs4You2i4a3O74jzViME4KU3KBOZb0qRdrJsDDUfAX7HBP",#os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL"),
+            api_key=os.getenv("OPENAI_API_KEY"),
         )
-        self.chat_model = "gemini-2.5-pro"#os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
+        self.chat_model = os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
         self.coding_tool = CodingTool()
 
     def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
