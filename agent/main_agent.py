@@ -100,7 +100,10 @@ class MainAgent:
         max_retries = 3
         retry_delay = 5 # 秒
 
-        print(f"messages: {conversation_context[:-1]}")
+        print(f"messages: ")
+        for mp in conversation_context[1:-1]:
+            print(f"role: {mp["role"]}")
+            print(f"content: {mp["content"]}")
         for attempt in range(max_retries):
             try:
                 # === 原有的 API 调用代码 ===

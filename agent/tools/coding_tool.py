@@ -1,5 +1,7 @@
 import os
 import json
+import openai
+import asyncio
 from openai import AsyncOpenAI
 from typing import Dict, Any
 from agent.memory import Memory
@@ -70,15 +72,23 @@ class CodingTool:
 
 请生成相应的 JavaScript 代码。"""
 
-        response = await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-        )
+        max_retries = 3
+        retry_delay = 5 # 秒
+
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": user_content}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                )
+            except openai.APIConnectionError as e:
+                print(f"⚠️ 网络连接错误: {e} - Retrying...")
+                await asyncio.sleep(retry_delay)
 
         print(f"response: {response}")
 

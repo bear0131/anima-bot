@@ -19,8 +19,8 @@ class Memory:
         self.model_name = model_name
 
         # --- 配置参数 ---
-        self.level1_limit = 50       # Level 1 容量 (原汁原味的 Event)
-        self.consolidate_batch = 50  # 每积累多少条新 Event 触发一次 Level 2 重构
+        self.level1_limit = 5       # Level 1 容量 (原汁原味的 Event)
+        self.consolidate_batch = 5  # 每积累多少条新 Event 触发一次 Level 2 重构
         self.level2_limit = 150       # Level 2 最大保留条数 (Pruning 阈值)
         self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
 
@@ -139,7 +139,7 @@ class Memory:
                 
                 content = response.choices[0].message.content
 
-                print("content: ", content)
+                #print("content: ", content)
 
                 result = json.loads(content)
                 
@@ -213,8 +213,7 @@ class Memory:
         for event in self.level1_events:
             if event.type == "chat":
                 if event.source == 'bot':
-                    # 转化规则：assistant -> model
-                    messages.append({"role": "model", "content": event.content})
+                    messages.append({"role": "assistant", "content": event.content})
                 else:
                     # 转化规则：user -> user
                     username = event.metadata.get('user', 'unknown')
@@ -222,7 +221,7 @@ class Memory:
 
             elif event.type == "code_run_request":
                 # 转化规则：assistant -> model
-                messages.append({"role": "model", "content": f"[Action Start] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
             
             elif event.type in ["code_run_result", "error"]:
                 # 转化规则：原本的 system -> user (环境反馈)

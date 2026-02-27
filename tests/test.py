@@ -1,10 +1,11 @@
 
 import os
 from openai import OpenAI
-
+from dotenv import load_dotenv
+load_dotenv()
 client = OpenAI(
-    api_key="AIzaSyAYJZ5qNgIbEvBaM112wqA4ug1tEfifBw0",
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    base_url=os.getenv("OPENAI_BASE_URL"),
+    api_key=os.getenv("OPENAI_API_KEY"),
 )
 
 response = client.chat.completions.create(
@@ -15,9 +16,9 @@ response = client.chat.completions.create(
         },
         {
             "role": "user",
-            "content": "Explain to me how AI works"
+            "content": "你会用 mineflayer 写 bot 代码吗，你写一个烧铁矿的代码试试"
         }
     ]
 )
 
-print(response.choices[0].message)
+print(response.choices[0].message.content)
