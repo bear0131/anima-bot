@@ -260,8 +260,16 @@ bot.once('spawn', async () => {
             browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
             page = await browser.newPage();
 
+            await page.evaluate(() => {
+                // viewer 是 prismarine-viewer 在网页端暴露的全局对象
+                if (window.viewer && window.viewer.camera) {
+                    window.viewer.camera.fov = 100; // 默认大概是 60-70，你可以调大到 90 或 100
+                    window.viewer.camera.updateProjectionMatrix(); // 更新相机矩阵让广角生效
+                }
+            });
+
             // 设置视口大小
-            await page.setViewport({ width: 640, height: 480 });
+            await page.setViewport({ width: 1920, height: 1080 });
 
             // 访问 Viewer 页面
             await page.goto('http://localhost:3007');
@@ -337,7 +345,7 @@ bot.once('spawn', async () => {
                 }));
             }
         });
-    }, 1000); // 1000ms = 1秒
+    }, 500); // 500ms = 0.5秒
 });
 
 async function getGameScreenshot() {

@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import dotenv
 import os
+import math
 
 from agent.schema import Event, AgentState, MemoryNode
 
@@ -264,6 +265,15 @@ class Memory:
         lines = [f"### 当前游戏状态"]
         lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
+        newyaw = mc.yaw
+        if newyaw < 0:
+            newyaw += 2 * math.pi
+        lines.append(f"我当前正看向 偏航角 yaw:{mc.yaw}, 俯仰角 pitch:{mc.pitch}")
+        if mc.pitch < -math.pi / 4:
+            lines.append("目前我正在朝下看")
+        if mc.pitch > math.pi / 4:
+            lines.append("目前我正在朝上看")
+
         if mc.inventory:
             items = [f"{n}x{c}" for n, c in mc.inventory.items()]
             lines.append(f"物品: {', '.join(items)}")

@@ -13,7 +13,7 @@ async function mineBlock(bot, name, count = 1) {
     const blocks = bot.findBlocks({
         matching: [blockByName.id],
         maxDistance: 32,
-        count: 1024,
+        count: count,//changed
     });
     if (blocks.length === 0) {
         report(`No ${name} nearby, please explore first`);
@@ -31,7 +31,7 @@ async function mineBlock(bot, name, count = 1) {
     }
     await bot.collectBlock.collect(targets, {
         ignoreNoPath: true,
-        count: count,
+        //count: count,
     });
     bot.save(`${name}_mined`);
     report(`Mined ${count} ${name}`);
