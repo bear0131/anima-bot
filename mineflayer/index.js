@@ -443,8 +443,6 @@ ws.on('message', async (data) => {
 
         async function runCodeWithTimeout(bot, generatedCode, timeoutMs = 60000) {
             return new Promise(async (resolve, reject) => {
-                
-                // 1. 设置一个 60 秒的定时炸弹
                 const timeoutTimer = setTimeout(() => {
                     console.log(`⏰ [超时拦截] 代码运行超过 ${timeoutMs/1000} 秒，正在强制刹车...`);
                     
@@ -489,6 +487,32 @@ ws.on('message', async (data) => {
 
         const code = command.payload;
         const programs = bot.primitivesCode;
+        const sandboxInitCode = `
+            // 1. 在沙盒内初始化并修补 mcData
+            const mcData = require("minecraft-data")(bot.version);
+            mcData.itemsByName["leather_cap"] = mcData.itemsByName["leather_helmet"];
+            mcData.itemsByName["leather_tunic"] = mcData.itemsByName["leather_chestplate"];
+            mcData.itemsByName["leather_pants"] = mcData.itemsByName["leather_leggings"];
+            mcData.itemsByName["leather_boots"] = mcData.itemsByName["leather_boots"];
+            if (mcData.itemsByName["lapis_ore"]) mcData.itemsByName["lapis_lazuli_ore"] = mcData.itemsByName["lapis_ore"];
+            if (mcData.blocksByName["lapis_ore"]) mcData.blocksByName["lapis_lazuli_ore"] = mcData.blocksByName["lapis_ore"];
+
+            // 2. 引入坐标库和所有的寻路 Goal
+            const { Vec3 } = require("vec3");
+            const {
+                Goal, GoalBlock, GoalNear, GoalXZ, GoalNearXZ, GoalY,
+                GoalGetToBlock, GoalLookAtBlock, GoalBreakBlock,
+                GoalCompositeAny, GoalCompositeAll, GoalInvert,
+                GoalFollow, GoalPlaceBlock
+            } = require("mineflayer-pathfinder").goals;
+
+            // 3. 初始化 Primitive 技能库需要的全局失败计数器
+            let _craftItemFailCount = 0;
+            let _killMobFailCount = 0;
+            let _mineBlockFailCount = 0;
+            let _placeItemFailCount = 0;
+            let _smeltItemFailCount = 0;
+        `;
 
         // 🌟 新增了 timeoutMs 参数，默认值为 60000 (60秒)
         async function evaluateCode(code, programs, timeoutMs = 30000) {
@@ -505,7 +529,7 @@ ws.on('message', async (data) => {
 
             try {
                 // 把声明拼接到最前面
-                const fullCode = programs + "\n" + code;
+                const fullCode = sandboxInitCode + "\n" + programs + "\n" + code;
                 
                 await runCodeWithTimeout(bot, fullCode, timeoutMs);
                 
