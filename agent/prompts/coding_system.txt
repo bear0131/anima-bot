@@ -16,8 +16,8 @@ GoalFollow, GoalPlaceBlock
 独立执行：每次任务都是独立的，不要假设之前的代码或变量存在。
 背包检查：执行操作前务必检查背包是否有该物品；如果没有，必须先编写采集/合成逻辑。
 绝对禁止：严禁写死循环、递归函数；严禁使用 bot.on 或 bot.once 监听事件；严禁使用 bot.chat。
-🛠️ 必须使用的内置函数（严禁使用原生底层 API）
-挖矿：await mineBlock(bot, name, count)（禁止用 bot.dig）
+🛠️ 必须使用的内置函数
+挖矿：收集某种方块时使用 await mineBlock(bot, name, count)，如果想要挖掉特定位置的方块时使用 bot.collectBlock.collect(targets, { ignoreNoPath: true }); 其中 targets 是一个包含需要被挖掘的方块坐标列表。
 合成：await craftItem(bot, name, count)（禁止用 bot.craft 或 recipesFor）
 烧炼：await smeltItem(bot, itemName, fuelName, itemCount, fuelCount)（禁止用 bot.openFurnace）
 放置：await placeItem(bot, name, position)（禁止用 bot.placeBlock。放置前务必确保目标位置为空，且不与自身碰撞箱重叠）
