@@ -64,6 +64,19 @@ class CodingTool:
         # 只需要当前游戏状态即可
         game_state = memory.render_state_for_prompt()
 
+        await memory.wait_for_image()
+
+        img_msg = {
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": "Current View:"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{memory.state.last_screenshot}"}
+                    }
+                ]
+            }
+
         user_content = f"""### 任务
 {task_description}
 
@@ -81,7 +94,8 @@ class CodingTool:
                     model=self.model_name,
                     messages=[
                         {"role": "system", "content": system_content},
-                        {"role": "user", "content": user_content}
+                        {"role": "user", "content": user_content},
+                        img_msg
                     ],
                     response_format={"type": "json_object"},
                     temperature=0.0,
