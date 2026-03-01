@@ -62,7 +62,7 @@ class CodingTool:
         # 准备用户消息
         # 注意：这里不使用 render_llm_context，因为代码信息不应该进主 memory
         # 只需要当前游戏状态即可
-        game_state = memory.render_state_for_prompt()
+        game_state = await memory.render_state_for_prompt()
 
         await memory.wait_for_image()
 

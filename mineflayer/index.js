@@ -407,6 +407,7 @@ ws.on('message', async (data) => {
         bot.pathfinder.setMovements(movements);
 
         // 4. Stuck Detection (防卡死机制)
+        /*
         bot.globalTickCounter = 0;
         bot.stuckTickCounter = 0;
         bot.stuckPosList = [];
@@ -425,6 +426,7 @@ ws.on('message', async (data) => {
         }
 
         bot.on("physicsTick", onTick);
+        */
 
         // 5. 初始化失败计数器 (Primitive 代码里会用到)
         let _craftItemFailCount = 0;
@@ -439,13 +441,60 @@ ws.on('message', async (data) => {
         // 6. 等待一点时间，确保世界状态稳定
         await bot.waitForTicks(bot.waitTicks);
 
+        async function runCodeWithTimeout(bot, generatedCode, timeoutMs = 60000) {
+            return new Promise(async (resolve, reject) => {
+                
+                // 1. 设置一个 60 秒的定时炸弹
+                const timeoutTimer = setTimeout(() => {
+                    console.log(`⏰ [超时拦截] 代码运行超过 ${timeoutMs/1000} 秒，正在强制刹车...`);
+                    
+                    // 🔴 核心操作：强制掐断 Bot 的一切当前动作，防止它在后台继续发疯
+                    try {
+                        // 清空寻路目标，停下脚步
+                        if (bot.pathfinder) bot.pathfinder.setGoal(null);
+                        // 松开所有按键 (前进、跳跃等)
+                        bot.clearControlStates();
+                        // 停止正在进行的挖矿
+                        bot.stopDigging();
+                        // 停止可能正在进行的使用物品动作 (如吃东西、拉弓)
+                        bot.deactivateItem();
+                    } catch (cleanupErr) {
+                        // 忽略清理时可能产生的报错
+                    }
+
+                    // 拒绝 Promise，抛出超时错误
+                    reject(new Error(`Timeout: 代码执行超过了 ${timeoutMs/1000} 秒被系统强制终止！`));
+                }, timeoutMs);
+
+                try {
+                    // 2. 将大模型的字符串代码构造成一个 Async 函数
+                    // 这相当于 async function(bot, require) { /* 生成的代码 */ }
+                    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                    const aiFunction = new AsyncFunction('bot', 'require', generatedCode);
+
+                    // 3. 开始执行 AI 的代码
+                    await aiFunction(bot, require);
+
+                    // 4. 如果代码在 60 秒内顺利执行完了，拆除定时炸弹
+                    clearTimeout(timeoutTimer);
+                    resolve("代码执行成功");
+
+                } catch (err) {
+                    // 如果代码执行过程中自己报错了（比如语法错误），也拆除炸弹并抛出
+                    clearTimeout(timeoutTimer);
+                    reject(err);
+                }
+            });
+        }
+
         const code = command.payload;
         const programs = bot.primitivesCode;
 
-        async function evaluateCode(code, programs) {
+        // 🌟 新增了 timeoutMs 参数，默认值为 60000 (60秒)
+        async function evaluateCode(code, programs, timeoutMs = 30000) {
             let outputMessages = []; // 用于收集输出
 
-            // 将 report 注入到 eval 可访问的全局作用域
+            // 将 report 注入到全局作用域
             global.report = (msg) => {
                 if (typeof msg === 'string') {
                     outputMessages.push(msg);
@@ -455,13 +504,31 @@ ws.on('message', async (data) => {
             };
 
             try {
-                // 使用 eval 保持作用域访问
-                await eval("(async () => {" + programs + "\n" + code + "})()");
-                delete global.report;
+                // 把声明拼接到最前面
+                const fullCode = programs + "\n" + code;
+                
+                await runCodeWithTimeout(bot, fullCode, timeoutMs);
+                
                 return { success: true, messages: outputMessages };
-            } catch (err) {
+
+            } catch (error) {
+                if (error.message && error.message.includes("Timeout")) {
+                    // 动态计算秒数，用于友好的日志提示
+                    const timeoutSeconds = Math.floor(timeoutMs / 1000);
+                    
+                    console.warn(`⚠️ [系统拦截] 任务执行已达 ${timeoutSeconds} 秒上限，正常中止。`);
+                    
+                    // 动态注入文本
+                    outputMessages.push(`[System] ⏳ 任务执行时间超过 ${timeoutSeconds} 秒，已被系统安全中止。已保留当前进度，如未完成请继续下达后续指令。`);
+                    
+                    return { success: true, messages: outputMessages };
+                } 
+                
+                console.error("❌ 代码运行报错:", error);
+                return { success: false, error: error.message, messages: outputMessages };
+
+            } finally {
                 delete global.report;
-                return { success: false, error: err, messages: outputMessages };
             }
         }
 
