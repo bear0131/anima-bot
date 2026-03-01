@@ -12,12 +12,17 @@ from agent.schema import Event, AgentState, MemoryNode
 
 dotenv.load_dotenv()
 bot_username = dotenv.get_key('.env', 'BOT_USERNAME') or 'animabot'
+world_name = dotenv.get_key('.env', 'WORLD_NAME') or 'default_world'
 
 class Memory:
     def __init__(self, agent_state: AgentState, llm_client, model_name: str):
         self.state = agent_state
         self.llm_client = llm_client # 需要传入 LLM 客户端用于重构记忆
         self.model_name = model_name
+
+        self.memory_dir = os.path.join('memory', world_name)
+        self.memory_file = os.path.join(self.memory_dir, 'memory.json')
+        os.makedirs(self.memory_dir, exist_ok=True)
 
         # --- 配置参数 ---
         self.level1_limit = 5       # Level 1 容量 (原汁原味的 Event)
@@ -30,6 +35,7 @@ class Memory:
 
         # --- Level 2: 长期语义记忆 ---
         self.level2_nodes: List[MemoryNode] = []
+        self._load_memory() # 启动时加载记忆
 
         # --- 缓冲区: 用于积累待重构的 Event ---
         self.consolidation_buffer: List[Event] = []
@@ -66,6 +72,30 @@ class Memory:
         if len(self.consolidation_buffer) >= self.consolidate_batch:
             # 触发异步重构，不要阻塞主线程
             asyncio.create_task(self._reconstruct_level2())
+
+    def _load_memory(self):
+        """从文件加载 Level 2 记忆。"""
+        if not os.path.exists(self.memory_file):
+            print("No memory file found. Starting with a fresh memory.")
+            return
+        try:
+            with open(self.memory_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.level2_nodes = [MemoryNode(**node_data) for node_data in data]
+                print(f"🧠 Loaded {len(self.level2_nodes)} memories from {self.memory_file}")
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"❌ Error loading memory file: {e}. Starting with a fresh memory.")
+            self.level2_nodes = []
+
+    def _save_memory(self):
+        """将当前 Level 2 记忆保存到文件。"""
+        try:
+            # 将 MemoryNode 对象列表转换为可序列化的字典列表
+            data_to_save = [node.model_dump() for node in self.level2_nodes]
+            with open(self.memory_file, 'w', encoding='utf-8') as f:
+                json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"❌ Failed to save memory: {e}")
 
     async def _reconstruct_level2(self):
         """
@@ -192,6 +222,8 @@ class Memory:
 
                 new_nodes.sort(key=lambda x: x.importance, reverse=True)
                 self.level2_nodes = new_nodes[:self.level2_limit]
+
+                self._save_memory()
 
                 print(f"🧠 [Memory Consolidation] Refactored Level 2. Count: {len(self.level2_nodes)}")
 
