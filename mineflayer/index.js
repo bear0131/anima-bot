@@ -218,7 +218,8 @@ const { loadControlPrimitives } = require('./lib/primitivesLoader');
 const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
     port: process.env.MINECRAFT_PORT ? parseInt(process.env.MINECRAFT_PORT) : 25565,
-    username: process.env.BOT_USERNAME || 'animabot'
+    username: process.env.BOT_USERNAME || 'animabot',
+    version: '1.19' 
 });
 
 bot.loadPlugin(pathfinder);
@@ -318,6 +319,7 @@ bot.once('spawn', async () => {
                         source: 'minecraft',
                         type: 'screenshot',
                         content: base64Data,
+                        timestamp: Date.now(),
                         metadata: { user: 'system' }
                     }));
                 })
@@ -333,6 +335,7 @@ bot.once('spawn', async () => {
                     source: 'minecraft',
                     type: 'observation',
                     content: state,  // JSON 字符串
+                    timestamp: Date.now(),
                     metadata: {}
                 }));
             } catch (e) {

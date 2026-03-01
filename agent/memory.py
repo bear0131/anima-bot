@@ -198,7 +198,23 @@ class Memory:
             except Exception as e:
                 print(f"❌ Memory consolidation failed: {e}")
 
-    def render_llm_context(self, include_image=True) -> List[Dict]:
+    async def render_llm_context(self, include_image=True) -> List[Dict]:
+
+        call_time_ms = int(time.time() * 1000)
+
+        # 2. 开始轮询等待
+        timeout = 60.0
+        elapsed = 0.0
+        poll_interval = 0.5  # 检查频率调高一点，每 50 毫秒检查一次
+        while elapsed < timeout:
+            if self.state.timestamp_state and int(self.state.timestamp_state.timestamp() * 1000) >= call_time_ms:
+                break  # 成功拿到了"未来"的新数据，退出等待！
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
+
         messages = []
 
         # --- 1. Level 2 记忆 (原本是 System) ---
@@ -237,6 +253,16 @@ class Memory:
             messages[-1]["content"] += f"\n{state_prompt}"
         else:
             messages.append({"role": "user", "content": state_prompt})
+
+        elapsed = 0.0
+        while elapsed < timeout:
+            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
+                break  
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+            
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
 
         # --- 4. 图像内容 ---
         if include_image and self.state.last_screenshot:

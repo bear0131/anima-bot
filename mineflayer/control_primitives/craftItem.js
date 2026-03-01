@@ -21,6 +21,8 @@ async function craftItem(bot, name, count = 1) {
         await bot.pathfinder.goto(
             new GoalLookAtBlock(craftingTable.position, bot.world)
         );
+        bot.pathfinder.setGoal(null);
+        await bot.waitForTicks(10); 
     }
     const recipe = bot.recipesFor(itemByName.id, null, 1, craftingTable)[0];
     if (recipe) {

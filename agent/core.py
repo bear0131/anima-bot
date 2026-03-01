@@ -23,8 +23,6 @@ class Agent:
         server.set_queue(self.event_queue)
 
         self.agent_state = AgentState()
-
-        self.agent_state = AgentState()
         self.llm_client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL") # 兼容第三方/中转
@@ -50,6 +48,7 @@ class Agent:
             js_extra_args.append("--prismarine_viewer=false")
 
         self.js_manager = JSProcessManager(extra_args=js_extra_args)
+        self._think_lock = asyncio.Lock() 
 
         # 注册全局状态供 API 访问
         server.set_agent_state(self.agent_state)
@@ -83,22 +82,23 @@ class Agent:
             # 清理 JS 进程
             await self.js_manager.cleanup()
 
+    async def _background_think_and_execute(self):
+        # 使用锁，如果上一个任务没想完，新任务就在门外排队，不会同时乱走
+        async with self._think_lock:
+            async for decision in self.main_agent.think_stream(self.memory):
+                # 注意这里要加导入 import logging (如果是用 logger)
+                logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
+                await self.execute_decision(decision)
+
     async def main_loop(self):
         while True:
             try:
-                # 缩短一点超时时间，或者直接等待
                 incoming_event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
-                # 只要检查是否活着，打印日志即可，不要干预
-                # 如果 JSProcessManager 正在重启中，is_alive 也是 False，这是正常的
                 if not await self.js_manager.is_alive():
-                    #TODO 可以检查一下 server 是否有连接，确认是不是真的断了很久
                     pass 
                 continue
 
-            # print(f"[Core] Received: {incoming_event.type}")
-
-            # 转换 IncomingEvent -> Event
             event = Event(
                 type=incoming_event.type,
                 content=incoming_event.content,
@@ -107,22 +107,22 @@ class Agent:
             )
 
             if event.type == 'screenshot':
+                self.agent_state.timestamp_screenshot = event.timestamp
                 self.agent_state.last_screenshot = event.content
 
             elif event.type == 'observation':
+                # 即使下面在大模型思考，这里的代码也会不断飞速执行！时间戳终于能更新了！
+                self.agent_state.timestamp_state = event.timestamp
                 self.agent_state.update_mc_state(event.content)
 
             elif event.type == 'chat':
-                # 1. 将 chat 事件加入 memory
                 self.memory.add_event(event)
                 logger.info(f"📥 收到聊天事件: {event.content}")
-                # 2. 调用 main_agent 处理
-                async for decision in self.main_agent.think_stream(self.memory):
-                    logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
-                    await self.execute_decision(decision)
+                
+                # 🔴 核心修改：不要在这里阻塞 await，创建后台任务！
+                asyncio.create_task(self._background_think_and_execute())
 
             elif event.type == 'code_run_result':
-                # 1. 构建结果描述
                 if incoming_event.error:
                     result_desc = f"代码执行失败: {incoming_event.error}"
                     if incoming_event.content:
@@ -133,20 +133,12 @@ class Agent:
                     if incoming_event.content:
                         result_desc += f"\n返回结果:\n{incoming_event.content}"
                     logger.info("✅ 代码执行成功")
-                    if incoming_event.content:
-                        logger.debug(f"📄 返回内容:\n{incoming_event.content}")
-
-                # 2. 更新 event content 为可读的描述
+                
                 event.content = result_desc
-
-                # 3. 将 code_run_result 事件加入 memory
                 self.memory.add_event(event)
 
-                # 4. 调用 main_agent 继续思考（基于执行结果）
-                # 此时 last_event 是 code_run_result，main_agent 需要能处理这种情况
-                async for decision in self.main_agent.think_stream(self.memory):
-                    logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
-                    await self.execute_decision(decision)
+                # 🔴 核心修改：不要在这里阻塞 await，创建后台任务！
+                asyncio.create_task(self._background_think_and_execute())
 
             self.event_queue.task_done()
 

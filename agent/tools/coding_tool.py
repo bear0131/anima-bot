@@ -85,7 +85,10 @@ class CodingTool:
                     ],
                     response_format={"type": "json_object"},
                     temperature=0.0,
+                    timeout=10.0, 
+                    reasoning_effort="low", 
                 )
+                break
             except openai.APIConnectionError as e:
                 print(f"⚠️ 网络连接错误: {e} - Retrying...")
                 await asyncio.sleep(retry_delay)

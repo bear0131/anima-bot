@@ -54,6 +54,8 @@ class AgentState(BaseModel):
     status: str = "IDLE"
     mc_state: Optional[MCState] = None
     last_screenshot: Optional[str] = None
+    timestamp_state: Optional[float] = None
+    timestamp_screenshot: Optional[float] = None
     
     def update_mc_state(self, observation_data: str):
         """从 observation JSON 字符串更新状态"""
@@ -92,7 +94,7 @@ class AgentState(BaseModel):
                 inventory_used=status.get("inventoryUsed"),
                 nearby_blocks=voxels.get("surrounding_blocks") if isinstance(voxels, dict) else voxels,
                 chests=chests,
-                raw_observation=observe_event
+                raw_observation=observe_event,
             )
         except Exception as e:
             print(f"[Error] Failed to parse observation: {e}")
