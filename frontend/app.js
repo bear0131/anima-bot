@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedRequests) {
         renderLLMRequests(storedRequests);
     }
+    
 
     // 启动轮询（会从 API 获取最新数据并覆盖缓存）
     startLLMPolling();

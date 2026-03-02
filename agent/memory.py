@@ -6,17 +6,23 @@ import time
 from datetime import datetime
 import dotenv
 import os
+import math
 
 from agent.schema import Event, AgentState, MemoryNode
 
 dotenv.load_dotenv()
 bot_username = dotenv.get_key('.env', 'BOT_USERNAME') or 'animabot'
+world_name = dotenv.get_key('.env', 'WORLD_NAME') or 'default_world'
 
 class Memory:
     def __init__(self, agent_state: AgentState, llm_client, model_name: str):
         self.state = agent_state
         self.llm_client = llm_client # 需要传入 LLM 客户端用于重构记忆
         self.model_name = model_name
+
+        self.memory_dir = os.path.join('memory', world_name)
+        self.memory_file = os.path.join(self.memory_dir, 'memory.json')
+        os.makedirs(self.memory_dir, exist_ok=True)
 
         # --- 配置参数 ---
         self.level1_limit = 5       # Level 1 容量 (原汁原味的 Event)
@@ -29,6 +35,7 @@ class Memory:
 
         # --- Level 2: 长期语义记忆 ---
         self.level2_nodes: List[MemoryNode] = []
+        self._load_memory() # 启动时加载记忆
 
         # --- 缓冲区: 用于积累待重构的 Event ---
         self.consolidation_buffer: List[Event] = []
@@ -65,6 +72,30 @@ class Memory:
         if len(self.consolidation_buffer) >= self.consolidate_batch:
             # 触发异步重构，不要阻塞主线程
             asyncio.create_task(self._reconstruct_level2())
+
+    def _load_memory(self):
+        """从文件加载 Level 2 记忆。"""
+        if not os.path.exists(self.memory_file):
+            print("No memory file found. Starting with a fresh memory.")
+            return
+        try:
+            with open(self.memory_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.level2_nodes = [MemoryNode(**node_data) for node_data in data]
+                print(f"🧠 Loaded {len(self.level2_nodes)} memories from {self.memory_file}")
+        except (json.JSONDecodeError, TypeError) as e:
+            print(f"❌ Error loading memory file: {e}. Starting with a fresh memory.")
+            self.level2_nodes = []
+
+    def _save_memory(self):
+        """将当前 Level 2 记忆保存到文件。"""
+        try:
+            # 将 MemoryNode 对象列表转换为可序列化的字典列表
+            data_to_save = [node.model_dump() for node in self.level2_nodes]
+            with open(self.memory_file, 'w', encoding='utf-8') as f:
+                json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"❌ Failed to save memory: {e}")
 
     async def _reconstruct_level2(self):
         """
@@ -192,12 +223,15 @@ class Memory:
                 new_nodes.sort(key=lambda x: x.importance, reverse=True)
                 self.level2_nodes = new_nodes[:self.level2_limit]
 
+                self._save_memory()
+
                 print(f"🧠 [Memory Consolidation] Refactored Level 2. Count: {len(self.level2_nodes)}")
 
             except Exception as e:
                 print(f"❌ Memory consolidation failed: {e}")
 
-    def render_llm_context(self, include_image=True) -> List[Dict]:
+    async def render_llm_context(self, include_image=True) -> List[Dict]:
+
         messages = []
 
         # --- 1. Level 2 记忆 (原本是 System) ---
@@ -229,13 +263,15 @@ class Memory:
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
-        state_prompt = self.render_state_for_prompt()
+        state_prompt = await self.render_state_for_prompt()
         
         # 检查最后一条消息是否为 user，如果是则合并，如果不是则新建
         if messages and messages[-1]["role"] == "user":
             messages[-1]["content"] += f"\n{state_prompt}"
         else:
             messages.append({"role": "user", "content": state_prompt})
+
+        await self.wait_for_image()        
 
         # --- 4. 图像内容 ---
         if include_image and self.state.last_screenshot:
@@ -256,7 +292,23 @@ class Memory:
         return messages
 
     # ... render_state_for_prompt 保持不变 ...
-    def render_state_for_prompt(self) -> str:
+    async def render_state_for_prompt(self) -> str:
+
+        call_time_ms = int(time.time() * 1000)
+
+        # 2. 开始轮询等待
+        timeout = 60.0
+        elapsed = 0.0
+        poll_interval = 0.5  # 检查频率调高一点，每 50 毫秒检查一次
+        while elapsed < timeout:
+            if self.state.timestamp_state and int(self.state.timestamp_state.timestamp() * 1000) >= call_time_ms:
+                break  # 成功拿到了"未来"的新数据，退出等待！
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
+
         # (直接复制之前的代码即可)
         if not self.state.mc_state:
             return "当前状态: 未知\n"
@@ -264,7 +316,31 @@ class Memory:
         lines = [f"### 当前游戏状态"]
         lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
+        lines.append(f"附近的方块：{mc.nearby_blocks}")
+        newyaw = mc.yaw
+        if newyaw < 0:
+            newyaw += 2 * math.pi
+        lines.append(f"我当前正看向 偏航角 yaw:{mc.yaw}, 俯仰角 pitch:{mc.pitch}")
+        if mc.pitch < -math.pi / 4:
+            lines.append("目前我正在朝下看")
+        if mc.pitch > math.pi / 4:
+            lines.append("目前我正在朝上看")
+
         if mc.inventory:
             items = [f"{n}x{c}" for n, c in mc.inventory.items()]
             lines.append(f"物品: {', '.join(items)}")
         return '\n'.join(lines) + '\n'
+    
+    async def wait_for_image(self):
+        call_time_ms = int(time.time() * 1000)
+        timeout = 60.0
+        elapsed = 0.0
+        poll_interval = 0.5  # 检查频率调高一点，每 50 毫秒检查一次
+        while elapsed < timeout:
+            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
+                break  
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+            
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")

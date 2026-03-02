@@ -218,7 +218,8 @@ const { loadControlPrimitives } = require('./lib/primitivesLoader');
 const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
     port: process.env.MINECRAFT_PORT ? parseInt(process.env.MINECRAFT_PORT) : 25565,
-    username: process.env.BOT_USERNAME || 'animabot'
+    username: process.env.BOT_USERNAME || 'animabot',
+    version: '1.19' 
 });
 
 bot.loadPlugin(pathfinder);
@@ -260,8 +261,16 @@ bot.once('spawn', async () => {
             browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
             page = await browser.newPage();
 
+            await page.evaluate(() => {
+                // viewer 是 prismarine-viewer 在网页端暴露的全局对象
+                if (window.viewer && window.viewer.camera) {
+                    window.viewer.camera.fov = 100; // 默认大概是 60-70，你可以调大到 90 或 100
+                    window.viewer.camera.updateProjectionMatrix(); // 更新相机矩阵让广角生效
+                }
+            });
+
             // 设置视口大小
-            await page.setViewport({ width: 640, height: 480 });
+            await page.setViewport({ width: 1920, height: 1080 });
 
             // 访问 Viewer 页面
             await page.goto('http://localhost:3007');
@@ -310,6 +319,7 @@ bot.once('spawn', async () => {
                         source: 'minecraft',
                         type: 'screenshot',
                         content: base64Data,
+                        timestamp: Date.now(),
                         metadata: { user: 'system' }
                     }));
                 })
@@ -325,6 +335,7 @@ bot.once('spawn', async () => {
                     source: 'minecraft',
                     type: 'observation',
                     content: state,  // JSON 字符串
+                    timestamp: Date.now(),
                     metadata: {}
                 }));
             } catch (e) {
@@ -337,7 +348,7 @@ bot.once('spawn', async () => {
                 }));
             }
         });
-    }, 1000); // 1000ms = 1秒
+    }, 500); // 500ms = 0.5秒
 });
 
 async function getGameScreenshot() {
@@ -396,6 +407,7 @@ ws.on('message', async (data) => {
         bot.pathfinder.setMovements(movements);
 
         // 4. Stuck Detection (防卡死机制)
+        /*
         bot.globalTickCounter = 0;
         bot.stuckTickCounter = 0;
         bot.stuckPosList = [];
@@ -414,6 +426,7 @@ ws.on('message', async (data) => {
         }
 
         bot.on("physicsTick", onTick);
+        */
 
         // 5. 初始化失败计数器 (Primitive 代码里会用到)
         let _craftItemFailCount = 0;
@@ -428,13 +441,84 @@ ws.on('message', async (data) => {
         // 6. 等待一点时间，确保世界状态稳定
         await bot.waitForTicks(bot.waitTicks);
 
+        async function runCodeWithTimeout(bot, generatedCode, timeoutMs = 60000) {
+            return new Promise(async (resolve, reject) => {
+                const timeoutTimer = setTimeout(() => {
+                    console.log(`⏰ [超时拦截] 代码运行超过 ${timeoutMs/1000} 秒，正在强制刹车...`);
+                    
+                    // 🔴 核心操作：强制掐断 Bot 的一切当前动作，防止它在后台继续发疯
+                    try {
+                        // 清空寻路目标，停下脚步
+                        if (bot.pathfinder) bot.pathfinder.setGoal(null);
+                        // 松开所有按键 (前进、跳跃等)
+                        bot.clearControlStates();
+                        // 停止正在进行的挖矿
+                        bot.stopDigging();
+                        // 停止可能正在进行的使用物品动作 (如吃东西、拉弓)
+                        bot.deactivateItem();
+                    } catch (cleanupErr) {
+                        // 忽略清理时可能产生的报错
+                    }
+
+                    // 拒绝 Promise，抛出超时错误
+                    reject(new Error(`Timeout: 代码执行超过了 ${timeoutMs/1000} 秒被系统强制终止！`));
+                }, timeoutMs);
+
+                try {
+                    // 2. 将大模型的字符串代码构造成一个 Async 函数
+                    // 这相当于 async function(bot, require) { /* 生成的代码 */ }
+                    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                    const aiFunction = new AsyncFunction('bot', 'require', generatedCode);
+
+                    // 3. 开始执行 AI 的代码
+                    await aiFunction(bot, require);
+
+                    // 4. 如果代码在 60 秒内顺利执行完了，拆除定时炸弹
+                    clearTimeout(timeoutTimer);
+                    resolve("代码执行成功");
+
+                } catch (err) {
+                    // 如果代码执行过程中自己报错了（比如语法错误），也拆除炸弹并抛出
+                    clearTimeout(timeoutTimer);
+                    reject(err);
+                }
+            });
+        }
+
         const code = command.payload;
         const programs = bot.primitivesCode;
+        const sandboxInitCode = `
+            // 1. 在沙盒内初始化并修补 mcData
+            const mcData = require("minecraft-data")(bot.version);
+            mcData.itemsByName["leather_cap"] = mcData.itemsByName["leather_helmet"];
+            mcData.itemsByName["leather_tunic"] = mcData.itemsByName["leather_chestplate"];
+            mcData.itemsByName["leather_pants"] = mcData.itemsByName["leather_leggings"];
+            mcData.itemsByName["leather_boots"] = mcData.itemsByName["leather_boots"];
+            if (mcData.itemsByName["lapis_ore"]) mcData.itemsByName["lapis_lazuli_ore"] = mcData.itemsByName["lapis_ore"];
+            if (mcData.blocksByName["lapis_ore"]) mcData.blocksByName["lapis_lazuli_ore"] = mcData.blocksByName["lapis_ore"];
 
-        async function evaluateCode(code, programs) {
+            // 2. 引入坐标库和所有的寻路 Goal
+            const { Vec3 } = require("vec3");
+            const {
+                Goal, GoalBlock, GoalNear, GoalXZ, GoalNearXZ, GoalY,
+                GoalGetToBlock, GoalLookAtBlock, GoalBreakBlock,
+                GoalCompositeAny, GoalCompositeAll, GoalInvert,
+                GoalFollow, GoalPlaceBlock
+            } = require("mineflayer-pathfinder").goals;
+
+            // 3. 初始化 Primitive 技能库需要的全局失败计数器
+            let _craftItemFailCount = 0;
+            let _killMobFailCount = 0;
+            let _mineBlockFailCount = 0;
+            let _placeItemFailCount = 0;
+            let _smeltItemFailCount = 0;
+        `;
+
+        // 🌟 新增了 timeoutMs 参数，默认值为 60000 (60秒)
+        async function evaluateCode(code, programs, timeoutMs = 30000) {
             let outputMessages = []; // 用于收集输出
 
-            // 将 report 注入到 eval 可访问的全局作用域
+            // 将 report 注入到全局作用域
             global.report = (msg) => {
                 if (typeof msg === 'string') {
                     outputMessages.push(msg);
@@ -444,13 +528,31 @@ ws.on('message', async (data) => {
             };
 
             try {
-                // 使用 eval 保持作用域访问
-                await eval("(async () => {" + programs + "\n" + code + "})()");
-                delete global.report;
+                // 把声明拼接到最前面
+                const fullCode = sandboxInitCode + "\n" + programs + "\n" + code;
+                
+                await runCodeWithTimeout(bot, fullCode, timeoutMs);
+                
                 return { success: true, messages: outputMessages };
-            } catch (err) {
+
+            } catch (error) {
+                if (error.message && error.message.includes("Timeout")) {
+                    // 动态计算秒数，用于友好的日志提示
+                    const timeoutSeconds = Math.floor(timeoutMs / 1000);
+                    
+                    console.warn(`⚠️ [系统拦截] 任务执行已达 ${timeoutSeconds} 秒上限，正常中止。`);
+                    
+                    // 动态注入文本
+                    outputMessages.push(`[System] ⏳ 任务执行时间超过 ${timeoutSeconds} 秒，已被系统安全中止。已保留当前进度，如未完成请继续下达后续指令。`);
+                    
+                    return { success: true, messages: outputMessages };
+                } 
+                
+                console.error("❌ 代码运行报错:", error);
+                return { success: false, error: error.message, messages: outputMessages };
+
+            } finally {
                 delete global.report;
-                return { success: false, error: err, messages: outputMessages };
             }
         }
 

@@ -4,9 +4,9 @@ async function placeItem(bot, name, position) {
         throw new Error(`name for placeItem must be a string`);
     }
     // return if position is not Vec3
-    if (!(position instanceof Vec3)) {
-        throw new Error(`position for placeItem must be a Vec3`);
-    }
+    //if (!(position instanceof Vec3)) {
+    //    throw new Error(`position for placeItem must be a Vec3`);
+    //}
     const itemByName = mcData.itemsByName[name];
     if (!itemByName) {
         throw new Error(`No item named ${name}`);
@@ -40,12 +40,14 @@ async function placeItem(bot, name, position) {
         report(
             `No block to place ${name} on. You cannot place a floating block.`
         );
+        /*
         _placeItemFailCount++;
         if (_placeItemFailCount > 10) {
             throw new Error(
                 `placeItem failed too many times. You cannot place a floating block.`
             );
         }
+        */
         return;
     }
 
@@ -64,12 +66,14 @@ async function placeItem(bot, name, position) {
             report(
                 `Error placing ${name}: ${err.message}, please find another position to place`
             );
+            /*
             _placeItemFailCount++;
             if (_placeItemFailCount > 10) {
                 throw new Error(
                     `placeItem failed too many times, please find another position to place.`
                 );
             }
+            */
         } else {
             report(`Placed ${name}`);
             bot.save(`${name}_placed`);

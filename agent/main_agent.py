@@ -84,7 +84,7 @@ class MainAgent:
         """
         # 构建初始上下文：system prompt + 历史（不含图片）
         conversation_context = [{"role": "system", "content": self.chat_system_prompt}]
-        history_messages = memory.render_llm_context(include_image=True)
+        history_messages = await memory.render_llm_context(include_image=True)
         conversation_context.extend(history_messages)
 
         # 检查 last_event (逻辑保持不变)

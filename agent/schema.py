@@ -32,6 +32,8 @@ class MCState(BaseModel):
     position: Optional[Dict[str, float]] = None  # {"x": 0, "y": 0, "z": 0}
     equipment: Optional[list] = None
     entities: Optional[Dict[str, float]] = None  # {entity_name: distance}
+    yaw: Optional[float] = None
+    pitch: Optional[float] = None
     
     # 从 inventory observation 获取
     inventory: Optional[Dict[str, int]] = None  # {item_name: count}
@@ -52,6 +54,8 @@ class AgentState(BaseModel):
     status: str = "IDLE"
     mc_state: Optional[MCState] = None
     last_screenshot: Optional[str] = None
+    timestamp_state: Optional[float] = None
+    timestamp_screenshot: Optional[float] = None
     
     def update_mc_state(self, observation_data: str):
         """从 observation JSON 字符串更新状态"""
@@ -84,11 +88,13 @@ class AgentState(BaseModel):
                 position=status.get("position"),
                 equipment=status.get("equipment"),
                 entities=status.get("entities"),
+                yaw=status.get("yaw"),
+                pitch=status.get("pitch"),
                 inventory=inventory,
                 inventory_used=status.get("inventoryUsed"),
                 nearby_blocks=voxels.get("surrounding_blocks") if isinstance(voxels, dict) else voxels,
                 chests=chests,
-                raw_observation=observe_event
+                raw_observation=observe_event,
             )
         except Exception as e:
             print(f"[Error] Failed to parse observation: {e}")
