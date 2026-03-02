@@ -219,8 +219,9 @@ const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
     port: process.env.MINECRAFT_PORT ? parseInt(process.env.MINECRAFT_PORT) : 25565,
     username: process.env.BOT_USERNAME || 'animabot',
-    version: '1.19' 
+    version: '1.19'
 });
+VIEWER_PORT = 3007;
 
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(tool);
@@ -249,12 +250,12 @@ bot.once('spawn', async () => {
 
     if (enablePrismarineViewer) {
         // 启动 Viewer (Web服务器)
-        mineflayerViewer(bot, { 
-            port: 3007,
+        mineflayerViewer(bot, {
+            port: VIEWER_PORT,
             firstPerson: true,
             viewDistance: 12,
         });
-        console.log('Viewer started on port 3007');
+        console.log(`Viewer started on port ${VIEWER_PORT}`);
 
         try {
             // 3. 启动 Puppeteer
@@ -271,6 +272,40 @@ bot.once('spawn', async () => {
 
             // 设置视口大小
             await page.setViewport({ width: 1920, height: 1080 });
+
+            // 在 navigation (page.goto) 之前插入
+            await page.setRequestInterception(true);
+
+            page.on('request', async (request) => {
+                const url = request.url();
+                // 拦截我们本地 viewer 服务的所有 js 文件
+                if (url.endsWith('.js') && url.includes(`localhost:${VIEWER_PORT}`)) {
+                    try {
+                        // 在 Node.js 端用 fetch 把真实代码拉下来
+                        const response = await fetch(url);
+                        let body = await response.text();
+
+                        // WebGL (Three.js) 这里一般会硬编码 PerspectiveCamera 默认视角为 75。
+                        // 无论它被混淆成了什么名字，创建相机的参数逻辑肯定类似于:
+                        // new n.PerspectiveCamera(75, window.innerWidth ... )
+                        // 我们用正则表达式直接把这个默认值改成你的目标 FOV（120）。
+                        body = body.replace(/PerspectiveCamera\(\s*75/g, `PerspectiveCamera(120`);
+
+                        // 将篡改后的代码返回给无头浏览器
+                        await request.respond({
+                            status: 200,
+                            contentType: 'application/javascript',
+                            body: body
+                        });
+                    } catch (err) {
+                        console.error('拦截替换 JS 失败:', err);
+                        request.continue();
+                    }
+                } else {
+                    // 其他请求（如 html、图片等）正常放行
+                    request.continue();
+                }
+            });
 
             // 访问 Viewer 页面
             await page.goto('http://localhost:3007');
@@ -444,8 +479,8 @@ ws.on('message', async (data) => {
         async function runCodeWithTimeout(bot, generatedCode, timeoutMs = 60000) {
             return new Promise(async (resolve, reject) => {
                 const timeoutTimer = setTimeout(() => {
-                    console.log(`⏰ [超时拦截] 代码运行超过 ${timeoutMs/1000} 秒，正在强制刹车...`);
-                    
+                    console.log(`⏰ [超时拦截] 代码运行超过 ${timeoutMs / 1000} 秒，正在强制刹车...`);
+
                     // 🔴 核心操作：强制掐断 Bot 的一切当前动作，防止它在后台继续发疯
                     try {
                         // 清空寻路目标，停下脚步
@@ -461,13 +496,13 @@ ws.on('message', async (data) => {
                     }
 
                     // 拒绝 Promise，抛出超时错误
-                    reject(new Error(`Timeout: 代码执行超过了 ${timeoutMs/1000} 秒被系统强制终止！`));
+                    reject(new Error(`Timeout: 代码执行超过了 ${timeoutMs / 1000} 秒被系统强制终止！`));
                 }, timeoutMs);
 
                 try {
                     // 2. 将大模型的字符串代码构造成一个 Async 函数
                     // 这相当于 async function(bot, require) { /* 生成的代码 */ }
-                    const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+                    const AsyncFunction = Object.getPrototypeOf(async function () { }).constructor;
                     const aiFunction = new AsyncFunction('bot', 'require', generatedCode);
 
                     // 3. 开始执行 AI 的代码
@@ -530,24 +565,24 @@ ws.on('message', async (data) => {
             try {
                 // 把声明拼接到最前面
                 const fullCode = sandboxInitCode + "\n" + programs + "\n" + code;
-                
+
                 await runCodeWithTimeout(bot, fullCode, timeoutMs);
-                
+
                 return { success: true, messages: outputMessages };
 
             } catch (error) {
                 if (error.message && error.message.includes("Timeout")) {
                     // 动态计算秒数，用于友好的日志提示
                     const timeoutSeconds = Math.floor(timeoutMs / 1000);
-                    
+
                     console.warn(`⚠️ [系统拦截] 任务执行已达 ${timeoutSeconds} 秒上限，正常中止。`);
-                    
+
                     // 动态注入文本
                     outputMessages.push(`[System] ⏳ 任务执行时间超过 ${timeoutSeconds} 秒，已被系统安全中止。已保留当前进度，如未完成请继续下达后续指令。`);
-                    
+
                     return { success: true, messages: outputMessages };
-                } 
-                
+                }
+
                 console.error("❌ 代码运行报错:", error);
                 return { success: false, error: error.message, messages: outputMessages };
 
