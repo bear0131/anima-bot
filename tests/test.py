@@ -16,7 +16,7 @@ response = client.chat.completions.create(
         },
         {
             "role": "user",
-            "content": "你会用 mineflayer 写 bot 代码吗，你写一个烧铁矿的代码试试"
+            "content": "你会用 mineflayer 写 bot 代码吗，你不依赖 setcontrolstate 和 pathfinder 写一个向前走一格的代码"
         }
     ]
 )

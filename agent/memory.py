@@ -338,7 +338,7 @@ class Memory:
         poll_interval = 0.5  # 检查频率调高一点，每 50 毫秒检查一次
         while elapsed < timeout:
             if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
-                break  
+                break
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
             
