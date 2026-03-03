@@ -96,7 +96,7 @@ class AnimaBotTestServer:
         # 格式化输出
         if source == 'minecraft':
             if msg_type == 'chat':
-                user = data.get('user', 'system')
+                user = data.get('metadata', {}).get('user', 'system')
                 content = data.get('content', '')
                 print(f"{Colors.OKBLUE}[聊天]{Colors.ENDC} {Colors.BOLD}{user}{Colors.ENDC}: {content}")
             elif msg_type == 'code_run_result':
