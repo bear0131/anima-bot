@@ -32,7 +32,7 @@ pitch：1.57为正上方，-1.57为正下方。
 
 挖掘：await digBlock(bot, position) 你必须先走到方块附近再进行挖掘。
 
-放置方块：await placeItem(bot, name, position) 在指定方块的某个面放置物品。
+放置方块：await placeItem(bot, name, position) 在 position 位置放置方块。你需要保证 position 位置没有方块。
 
 合成物品
     const itemByName = mcData.itemsByName[name];//name is a string
@@ -51,7 +51,5 @@ report(message): 只能汇报目前做的事情，禁止汇报成功/失败。
 
 JSON
 {
-  "explain": "",
-  "plan": "",
   "code": "在此处编写 JS 代码。记住：NO IF, NO LOOP, NO PATHFINDER。"
 }

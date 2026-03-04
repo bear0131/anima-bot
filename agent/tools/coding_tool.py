@@ -4,8 +4,13 @@ import openai
 import asyncio
 from openai import AsyncOpenAI
 from typing import Dict, Any
-from agent.memory import Memory
+from agent.memory import CodeMemory, ChatMemory
 from agent.clean_content import remove_think_tags
+from agent.logger import get_logger
+from interfaces import server
+from interfaces.protocol import IncomingEvent, OutgoingCommand
+
+logger = get_logger("core")
 
 class CodingTool:
     """
@@ -34,6 +39,7 @@ class CodingTool:
             api_key=os.getenv("OPENAI_API_KEY"),
         )
         self.model_name = os.getenv("CODING_MODEL_NAME", "gpt-4o-2024-08-06")
+        #self.memory = CodeMemory()
 
     def _load_control_primitives(self, primitive_names) -> str:
         """加载控制原语代码"""
@@ -44,8 +50,21 @@ class CodingTool:
                 with open(path, "r", encoding="utf-8") as f:
                     programs.append(f.read())
         return "\n\n".join(programs)
+    
+    async def execute_decision(self, decision):
+        logger.debug(f"Executing: {decision['type']}")
 
-    async def generate_code(self, task_description: str, memory: Memory) -> Dict[str, Any]:
+        cmd = OutgoingCommand(
+            type=decision['type'],
+            target='minecraft',
+            payload=decision['content'],
+        )
+
+        self.record_command(cmd)
+
+        await server.send_packet(cmd.model_dump())
+
+    async def generate_code(self, task_description: str, memory: ChatMemory) -> Dict[str, Any]:
         """
         生成 Minecraft JavaScript 代码
 
@@ -89,7 +108,7 @@ class CodingTool:
         retry_delay = 5 # 秒
 
         
-        print(f"coding_tool game_state: {game_state}")
+        #print(f"coding_tool game_state: {game_state}")
 
         for attempt in range(max_retries):
             try:
@@ -103,7 +122,7 @@ class CodingTool:
                     response_format={"type": "json_object"},
                     temperature=0.0,
                     timeout=10.0, 
-                    reasoning_effort="low", 
+                    reasoning_effort="low",
                 )
                 break
             except openai.APIConnectionError as e:
@@ -126,9 +145,11 @@ class CodingTool:
         print(f"  📜 代码:\n{code}")
         print(f"{'='*60}\n")
 
-        return {
+        decision = {
             "type": "code_run_request",
             "content": code,
             "reason": plan,
             "metadata": {"source": "coding_tool"}
         }
+
+

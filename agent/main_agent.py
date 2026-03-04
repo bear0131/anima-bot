@@ -7,7 +7,7 @@ import openai
 from openai import AsyncOpenAI
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from dotenv import load_dotenv
-from agent.memory import Memory
+from agent.memory import ChatMemory
 from agent.tools.coding_tool import CodingTool
 from agent.clean_content import remove_think_tags
 
@@ -75,7 +75,7 @@ class MainAgent:
             import traceback
             traceback.print_exc()
 
-    async def think_stream(self, memory: Memory) -> AsyncGenerator[Dict[str, Any], None]:
+    async def think_stream(self, memory: ChatMemory) -> AsyncGenerator[Dict[str, Any], None]:
         """
         主思考单次调用：
         1. 从 memory 渲染完整上下文
@@ -103,7 +103,8 @@ class MainAgent:
         print(f"main_agent messages: ")
         for mp in conversation_context[1:-1]:
             print(f"role: {mp["role"]}")
-            print(f"content: {mp["content"]}")
+            s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
+            print(f"content: {s}")
         for attempt in range(max_retries):
             try:
                 # === 原有的 API 调用代码 ===

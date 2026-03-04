@@ -7,7 +7,7 @@ from interfaces.protocol import IncomingEvent, OutgoingCommand
 from interfaces.js_process_manager import JSProcessManager
 from agent.main_agent import MainAgent
 from agent.schema import Event, AgentState
-from agent.memory import Memory
+from agent.memory import ChatMemory
 from agent.logger import get_logger
 from openai import AsyncOpenAI
 
@@ -32,7 +32,7 @@ class Agent:
         self.memory_model = os.getenv("MEMORY_MODEL_NAME")
 
         # 3. 初始化 Memory (传入刚创建的 client 和模型名)
-        self.memory = Memory(
+        self.memory = ChatMemory(
             agent_state=self.agent_state,
             llm_client=self.llm_client,
             model_name=self.memory_model

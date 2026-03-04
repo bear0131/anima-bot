@@ -111,7 +111,7 @@ class Status extends Observation {
             }
 
             const distance = entity.position.distanceTo(this.bot.entity.position);
-            if (distance < 16) {
+            if (1 <= distance && distance < 16) {
                 const itemMetadata = entity.metadata[8];
                 const itemName = this.mcData.items[itemMetadata.itemId].name;
                 const itemCount = itemMetadata.itemCount;
