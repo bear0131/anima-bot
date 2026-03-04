@@ -4,6 +4,7 @@ class Status extends Observation {
     constructor(bot) {
         super(bot);
         this.name = "status";
+        this.mcData = require('minecraft-data')(bot.version);
     }
 
     observe() {
@@ -29,6 +30,7 @@ class Status extends Observation {
                 ? this.bot.blockAt(this.bot.entity.position).biome.name
                 : "None",
             entities: this.getEntities(),
+            nearbyItems: this.getNearbyItems(),
             timeOfDay: this.getTime(),
             inventoryUsed: this.bot.inventoryUsed(),
             elapsedTime: this.bot.globalTickCounter,
@@ -97,6 +99,31 @@ class Status extends Observation {
             }
         }
         return mobs;
+    }
+
+    getNearbyItems() {
+        const nearbyItems = [];
+        for (const id in this.bot.entities) {
+            const entity = this.bot.entities[id];
+            // 只关注类型为 'item' 的实体
+            if (entity.name !== 'item' || !entity.metadata || !entity.metadata[8]) {
+                continue;
+            }
+
+            const distance = entity.position.distanceTo(this.bot.entity.position);
+            if (distance < 16) {
+                const itemMetadata = entity.metadata[8];
+                const itemName = this.mcData.items[itemMetadata.itemId].name;
+                const itemCount = itemMetadata.itemCount;
+
+                nearbyItems.push({
+                    name: itemName,
+                    count: itemCount,
+                    position: entity.position
+                });
+            }
+        }
+        return nearbyItems;
     }
 }
 
