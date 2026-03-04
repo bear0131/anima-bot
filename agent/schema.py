@@ -32,6 +32,7 @@ class MCState(BaseModel):
     position: Optional[Dict[str, float]] = None  # {"x": 0, "y": 0, "z": 0}
     equipment: Optional[list] = None
     entities: Optional[Dict[str, float]] = None  # {entity_name: distance}
+    nearby_items: Optional[list] = None  # [item_name1, item_name2, ...]
     yaw: Optional[float] = None
     pitch: Optional[float] = None
     
@@ -92,6 +93,7 @@ class AgentState(BaseModel):
                 entities=status.get("entities"),
                 yaw=status.get("yaw"),
                 pitch=status.get("pitch"),
+                nearby_items=status.get("nearbyItems"),
                 inventory=inventory,
                 inventory_used=status.get("inventoryUsed"),
                 nearby_blocks=voxels.get("surrounding_blocks") if isinstance(voxels, dict) else voxels,
