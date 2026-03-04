@@ -39,6 +39,34 @@ class BlockRecords extends Observation {
     }
 }
 
+class VisibleBlocks extends Observation {
+    constructor(bot, options = {}) {
+        super(bot);
+        this.name = "visibleBlocks";
+        this.distance = options.distance || 10;
+    }
+
+    observe() {
+        const visibleBlocks = [];
+        const blocks = this.bot.findBlocks({
+            matching: (block) => block.type !== 0, // Match any non-air block
+            maxDistance: this.distance,
+            count: Infinity,
+        });
+
+        for (const point of blocks) {
+            const block = this.bot.blockAt(point);
+            if (block && this.bot.canSeeBlock(block)) {
+                visibleBlocks.push({
+                    name: block.name,
+                    position: block.position,
+                });
+            }
+        }
+        return visibleBlocks;
+    }
+}
+
 function getSurroundingBlocks(bot, x_distance, y_distance, z_distance) {
     const surroundingBlocks = new Set();
 
@@ -64,4 +92,4 @@ function getInventoryItems(bot) {
     return items;
 }
 
-module.exports = { Voxels, BlockRecords };
+module.exports = { Voxels, BlockRecords, VisibleBlocks };

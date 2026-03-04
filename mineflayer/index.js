@@ -206,7 +206,7 @@ const obs = require("./lib/observation/base");
 const skills = require("./lib/skillLoader");
 const OnChat = require("./lib/observation/onChat");
 const OnError = require("./lib/observation/onError");
-const { Voxels, BlockRecords } = require("./lib/observation/voxels");
+const { Voxels, BlockRecords, VisibleBlocks } = require("./lib/observation/voxels");
 const Status = require("./lib/observation/status");
 const Inventory = require("./lib/observation/inventory");
 const Chests = require("./lib/observation/chests");
@@ -327,7 +327,7 @@ bot.once('spawn', async () => {
 
     skills.inject(bot);
 
-    obs.inject(bot, [OnChat, OnError, Voxels, Status, Inventory, Chests, BlockRecords]);
+    obs.inject(bot, [OnChat, OnError, Voxels, Status, Inventory, Chests, BlockRecords, VisibleBlocks]);
 
     bot.primitivesCode = loadControlPrimitives();
     bot.waitTicks = 20;

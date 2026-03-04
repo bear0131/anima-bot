@@ -41,6 +41,7 @@ class MCState(BaseModel):
     
     # 从 voxels observation 获取
     nearby_blocks: Optional[list] = None  # [block_name1, block_name2, ...]
+    visible_blocks: Optional[list] = None  # [block_name1, block_name2, ...]
     
     # 从 chests observation 获取
     chests: Optional[Dict] = None
@@ -78,6 +79,7 @@ class AgentState(BaseModel):
             status = observe_event.get("status", {})
             inventory = observe_event.get("inventory", {})
             voxels = observe_event.get("voxels", {})
+            visible_blocks = observe_event.get("visibleBlocks", [])
             chests = observe_event.get("chests", {})
             
             self.mc_state = MCState(
@@ -93,6 +95,7 @@ class AgentState(BaseModel):
                 inventory=inventory,
                 inventory_used=status.get("inventoryUsed"),
                 nearby_blocks=voxels.get("surrounding_blocks") if isinstance(voxels, dict) else voxels,
+                visible_blocks=visible_blocks,
                 chests=chests,
                 raw_observation=observe_event,
             )
