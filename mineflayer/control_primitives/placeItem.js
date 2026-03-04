@@ -54,7 +54,7 @@ async function placeItem(bot, name, position) {
     // You must use try catch to placeBlock
     try {
         // You must first go to the block position you want to place
-        await bot.pathfinder.goto(new GoalPlaceBlock(position, bot.world, {}));
+        //await bot.pathfinder.goto(new GoalPlaceBlock(position, bot.world, {}));
         // You must equip the item right before calling placeBlock
         await bot.equip(item, "hand");
         await bot.placeBlock(referenceBlock, faceVector);

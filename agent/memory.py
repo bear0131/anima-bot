@@ -316,7 +316,7 @@ class Memory:
         lines = [f"### 当前游戏状态"]
         lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
-        lines.append(f"附近的方块：{mc.nearby_blocks}")
+        #lines.append(f"附近的方块：{mc.nearby_blocks}")
         lines.append(f"可见的方块: {mc.visible_blocks}")
         newyaw = mc.yaw
         if newyaw < 0:

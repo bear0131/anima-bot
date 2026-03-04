@@ -88,6 +88,9 @@ class CodingTool:
         max_retries = 3
         retry_delay = 5 # 秒
 
+        
+        print(f"coding_tool game_state: {game_state}")
+
         for attempt in range(max_retries):
             try:
                 response = await self.client.chat.completions.create(

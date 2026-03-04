@@ -100,7 +100,7 @@ class MainAgent:
         max_retries = 3
         retry_delay = 5 # 秒
 
-        print(f"messages: ")
+        print(f"main_agent messages: ")
         for mp in conversation_context[1:-1]:
             print(f"role: {mp["role"]}")
             print(f"content: {mp["content"]}")
