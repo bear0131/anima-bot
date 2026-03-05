@@ -87,7 +87,6 @@ class Agent:
                 metadata=incoming_event.metadata
             )
             
-            print(f"Received event: {event.type} from {event.source} with content: {event.content[:100]}...")
             if event.type == 'user_chat':
                 logger.info(f"📥 收到聊天事件: {event.content}")
                 asyncio.create_task(self.main_agent.event_queue.put(event))
@@ -132,12 +131,12 @@ class Agent:
             self.event_queue.task_done()
 
     async def execute_decision(self, decision: Event):
-        logger.debug(f"Executing: {decision['type']}")
+        logger.debug(f"Executing: {decision.type}")
 
         cmd = OutgoingCommand(
-            type=decision['type'],
+            type=decision.type,
             target='minecraft',
-            payload=decision['content'],
+            payload=decision.content,
         )
 
         await server.send_packet(cmd.model_dump())
