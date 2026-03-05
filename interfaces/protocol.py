@@ -14,3 +14,4 @@ class OutgoingCommand(BaseModel):
     target: str       # "minecraft"
     type: Literal["code_run_request", "get_observation", "bot_chat"]  # 指令类型
     payload: Any      # 要说的话，或者要执行的代码字符串，或者 None
+    metadata: Optional[Dict] = {}  # 可选的额外信息

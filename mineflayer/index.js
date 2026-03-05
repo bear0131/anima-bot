@@ -414,6 +414,8 @@ ws.on('message', async (data) => {
         bot.chat(command.payload);
     } else if (command.type === 'code_run_request') {
         console.log("Executing code...");
+        
+        const incomingMetadata = command.metadata || {};
 
         //  Context reconstruction
 
@@ -603,7 +605,8 @@ ws.on('message', async (data) => {
                     source: 'minecraft',
                     type: 'code_run_result',
                     error: result.error.message || result.error,
-                    content: result.messages.join('\n') || result.error.stack
+                    content: result.messages.join('\n') || result.error.stack,
+                    metadata: incomingMetadata
                 }));
             } else {
                 // 执行成功
@@ -611,7 +614,8 @@ ws.on('message', async (data) => {
                 ws.send(JSON.stringify({
                     source: 'minecraft',
                     type: 'code_run_result',
-                    content: result.messages.join('\n') || "执行完成，无输出。"
+                    content: result.messages.join('\n') || "执行完成，无输出。",
+                    metadata: incomingMetadata
                 }));
             }
 
@@ -626,7 +630,8 @@ ws.on('message', async (data) => {
                 source: 'minecraft',
                 type: 'code_run_result',
                 error: e.message,
-                content: e.stack
+                content: e.stack,
+                metadata: incomingMetadata
             }));
         } finally {
             // // 清理监听器，防止内存泄漏或逻辑冲突

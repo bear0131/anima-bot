@@ -25,7 +25,7 @@ class Agent:
         self.agent_state = AgentState()
         
         self.main_agent = MainAgent(self.agent_state, self.event_queue)
-        self.coding_tool = CodingTool(self.agent_state)
+        self.coding_tool = CodingTool(self.agent_state, self.event_queue)
 
         # 初始化 JS 进程管理器
         # 从环境变量读取命令行参数
@@ -137,6 +137,7 @@ class Agent:
             type=decision.type,
             target='minecraft',
             payload=decision.content,
+            metadata=decision.metadata
         )
 
         await server.send_packet(cmd.model_dump())
