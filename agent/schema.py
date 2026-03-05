@@ -114,7 +114,7 @@ class AgentState(BaseModel):
         elapsed = 0.0
         poll_interval = 0.1
         while elapsed < timeout:
-            if self.state.timestamp_state and int(self.state.timestamp_state.timestamp() * 1000) >= call_time_ms:
+            if self.timestamp_state and int(self.timestamp_state.timestamp() * 1000) >= call_time_ms:
                 break
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
@@ -122,10 +122,10 @@ class AgentState(BaseModel):
         if elapsed >= timeout:
             print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
 
-        if not self.state.mc_state:
+        if not self.mc_state:
             return "当前状态: 未知\n"
 
-        mc = self.state.mc_state
+        mc = self.mc_state
         lines = [f"### 当前游戏状态"]
         lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
