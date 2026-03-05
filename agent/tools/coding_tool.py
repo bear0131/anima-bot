@@ -4,11 +4,9 @@ import openai
 import asyncio
 from openai import AsyncOpenAI
 from typing import Dict, Any
-from agent.memory import CodeMemory, ChatMemory
+from agent.memory import CodeMemory
 from agent.clean_content import remove_think_tags
 from agent.logger import get_logger
-from interfaces import server
-from interfaces.protocol import IncomingEvent, OutgoingCommand
 from agent.schema import Event, AgentState
 
 logger = get_logger("core")
@@ -41,7 +39,7 @@ class CodingTool:
         )
         self.model_name = os.getenv("CODING_MODEL_NAME", "gpt-4o-2024-08-06")
         self.core_event_queue = core_event_queue
-        self.memory = DummyMemory()  # TODO: just for testing
+        self.memory = CodeMemory()  # TODO: just for testing
 
         self.task_id = 0
 
@@ -59,18 +57,22 @@ class CodingTool:
 
         task_description = f"总任务: {event.metadata['main_goal']}\n上次返回的结果: {event.content}\n\n请基于此继续生成代码，直到完成总任务。"
         
-        code, _, return_type = await self.generate_code(task_description)
-
-        await self.memory.add_memory() # TODO, but this can be quite time-consuming?
+        code, plan, return_type = await self.generate_code(task_description)
 
         if event.metadata["task_id"] != self.task_id:
             logger.warning(f"Received result for task_id {event.metadata['task_id']} but current task_id is {self.task_id}, ignoring...")
             return
+        
+        await self.memory.add_event(Event(
+            type='code_run_result',
+            content=event.content
+        ))
+
         if return_type == "task_done":
             return_event = Event(
                 type="task_done",
                 content=code,
-                source="coding_tool",
+                source="coding_tool"
             )
         else:
             return_event = Event(
@@ -79,6 +81,16 @@ class CodingTool:
                 source="coding_tool",
                 metadata={"task_id": event.metadata["task_id"], "main_goal": event.metadata["main_goal"]},
             )
+        
+        await self.memory.add_event(Event(
+            type="code_run_request",
+            contest={
+                "plan": plan,
+                "code": code
+            },
+            source="coding_tool",
+            metadata={"main_goal": event.metadata["main_goal"]},
+        ))
         
         await self.core_event_queue.put(return_event)
             
@@ -90,10 +102,8 @@ class CodingTool:
         task_event = event
         task_event.metadata["task_id"] = self.task_id
         task_event.metadata["main_goal"] = event.content
-        
 
-        await self.memory.resolve() # TODO
-
+        await self.memory.refresh_memory()
 
         await self.receive_result(task_event)
 
@@ -119,7 +129,7 @@ class CodingTool:
         # 准备用户消息
         # 注意：这里不使用 render_llm_context，因为代码信息不应该进主 memory
         # 只需要当前游戏状态即可
-        messages = await self.memory.render_llm_context() # TODO
+        messages = await self.memory.render_llm_context()
         messages.append({"role": "system", "content": system_content})
         messages.append({"role": "user", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
 
@@ -134,7 +144,7 @@ class CodingTool:
                     messages=messages,
                     response_format={"type": "json_object"},
                     temperature=0.0,
-                    timeout=10.0, 
+                    timeout=10.0,
                     reasoning_effort="low",
                 )
                 break
@@ -253,10 +263,10 @@ class CodingTool:
 #         return code, plan
     
 class DummyMemory:
-    async def add_memory(self):
+    async def add_event(self):
         pass
     
-    async def resolve(self):
+    async def refresh_memory(self):
         pass
 
     async def render_llm_context(self):

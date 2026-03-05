@@ -233,13 +233,13 @@ class MainAgent:
                 "type": "function",
                 "function": {
                     "name": "execute_minecraft_code",
-                    "description": "在 Minecraft 世界中执行操作，如移动、挖矿、合成、放置方块等。当用户请求需要在游戏中执行动作时调用此工具。",
+                    "description": "在 Minecraft 世界中执行操作.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "task": {
                                 "type": "string",
-                                "description": "需要执行的任务描述，例如：挖 10 个石头，合成一个木镐，走到坐标 (100, 64, 200)"
+                                "description": "需要执行的任务描述."
                             }
                         },
                         "required": ["task"]

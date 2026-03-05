@@ -2,6 +2,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, Literal
 from datetime import datetime
 import uuid
+import time
+import math
+import asyncio
 
 class Event(BaseModel):
     """系统内部流转的通用事件格式"""
@@ -103,6 +106,62 @@ class AgentState(BaseModel):
             )
         except Exception as e:
             print(f"[Error] Failed to parse observation: {e}")
+    
+    async def render_state_for_prompt(self) -> str:
+        call_time_ms = int(time.time() * 1000)
+
+        timeout = 60.0
+        elapsed = 0.0
+        poll_interval = 0.1
+        while elapsed < timeout:
+            if self.state.timestamp_state and int(self.state.timestamp_state.timestamp() * 1000) >= call_time_ms:
+                break
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
+
+        if not self.state.mc_state:
+            return "当前状态: 未知\n"
+
+        mc = self.state.mc_state
+        lines = [f"### 当前游戏状态"]
+        lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
+        lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
+        lines.append(f"可见的方块: {mc.visible_blocks}")
+        lines.append(f"附近的掉落物: {mc.nearby_items}")
+
+        newyaw = mc.yaw
+        if newyaw < 0:
+            newyaw += 2 * math.pi
+
+        lines.append(f"我当前正看向 偏航角 yaw:{mc.yaw}, 俯仰角 pitch:{mc.pitch}")
+
+        if mc.pitch < -math.pi / 4:
+            lines.append("目前我正在朝下看")
+        if mc.pitch > math.pi / 4:
+            lines.append("目前我正在朝上看")
+
+        if mc.inventory:
+            items = [f"{n}x{c}" for n, c in mc.inventory.items()]
+            lines.append(f"物品: {', '.join(items)}")
+
+        return '\n'.join(lines) + '\n'
+
+    async def wait_for_image(self):
+        call_time_ms = int(time.time() * 1000)
+        timeout = 60.0
+        elapsed = 0.0
+        poll_interval = 0.1
+        while elapsed < timeout:
+            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
+                break
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        if elapsed >= timeout:
+            print(f"⚠️ [Warning] render_llm_context: 等待最新截图超时 ({timeout}s)，将使用当前缓存的数据。")
 
 # 感觉暂时用不上这个。
 # class Decision(BaseModel):
