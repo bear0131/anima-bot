@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from agent.memory import ChatMemory
 from agent.tools.coding_tool import CodingTool
 from agent.clean_content import remove_think_tags
+from agent.schema import Event, AgentState
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ def get_llm_requests() -> List[Dict]:
 class MainAgent:
     _max_requests = 20  # 保留类变量用于实例访问
 
-    def __init__(self):
+    def __init__(self, agent_state: AgentState):
         # 加载 chat prompt
         prompts_dir = "agent/prompts"
         with open(f"{prompts_dir}/chat_system.txt", encoding="utf-8") as f:
@@ -35,7 +36,33 @@ class MainAgent:
             api_key=os.getenv("OPENAI_API_KEY"),
         )
         self.chat_model = os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
-        self.coding_tool = CodingTool()
+        self.event_queue = asyncio.Queue()
+
+        self.llm_client = AsyncOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL") # 兼容第三方/中转
+        )
+
+        # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
+        self.memory_model = os.getenv("MEMORY_MODEL_NAME")
+
+        self.agent_state = agent_state
+        # 3. 初始化 Memory (传入刚创建的 client 和模型名)
+        self.memory = ChatMemory(
+            agent_state=self.agent_state,
+            llm_client=self.llm_client,
+            model_name=self.memory_model
+        )
+    
+    async def main_loop(self):
+        while True:
+            try:
+                incoming_event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                if not await self.js_manager.is_alive():
+                    pass 
+                continue
+            self.memory.add_event(incoming_event)
 
     def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
         """保存 LLM 请求到历史记录"""

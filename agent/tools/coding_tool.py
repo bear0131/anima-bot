@@ -9,6 +9,7 @@ from agent.clean_content import remove_think_tags
 from agent.logger import get_logger
 from interfaces import server
 from interfaces.protocol import IncomingEvent, OutgoingCommand
+from agent.schema import Event, AgentState
 
 logger = get_logger("core")
 
@@ -18,7 +19,7 @@ class CodingTool:
     被主 agent 通过 tool call 调用，直接返回代码（不 yield）
     """
 
-    def __init__(self):
+    def __init__(self, agent_state: AgentState):
         prompts_dir = os.getenv("PROMPT_PATH", "agent/prompts")
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
         self.primitives_dir = os.path.join(
@@ -30,15 +31,16 @@ class CodingTool:
             self._system_template = f.read()
 
         self._programs_context = self._load_control_primitives([
-            "exploreUntil", "mineBlock", "craftItem",
-            "placeItem", "smeltItem", "killMob"
+            "smeltItem", "killMob"
         ])
 
+        self.agent_state = agent_state
         self.client = AsyncOpenAI(
             base_url=os.getenv("OPENAI_BASE_URL"),
             api_key=os.getenv("OPENAI_API_KEY"),
         )
         self.model_name = os.getenv("CODING_MODEL_NAME", "gpt-4o-2024-08-06")
+        self.event_queue = asyncio.Queue()
         #self.memory = CodeMemory()
 
     def _load_control_primitives(self, primitive_names) -> str:
@@ -63,6 +65,12 @@ class CodingTool:
         self.record_command(cmd)
 
         await server.send_packet(cmd.model_dump())
+
+    async def tool_call(self, event: Event):
+        pass
+
+    async def receive_result(self, event: Event):
+        pass
 
     async def generate_code(self, task_description: str, memory: ChatMemory) -> Dict[str, Any]:
         """

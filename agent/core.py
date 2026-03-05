@@ -7,9 +7,9 @@ from interfaces.protocol import IncomingEvent, OutgoingCommand
 from interfaces.js_process_manager import JSProcessManager
 from agent.main_agent import MainAgent
 from agent.schema import Event, AgentState
-from agent.memory import ChatMemory
 from agent.logger import get_logger
 from openai import AsyncOpenAI
+from agent.tools.coding_tool import CodingTool
 
 load_dotenv()
 
@@ -23,21 +23,9 @@ class Agent:
         server.set_queue(self.event_queue)
 
         self.agent_state = AgentState()
-        self.llm_client = AsyncOpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL") # 兼容第三方/中转
-        )
-
-        # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
-        self.memory_model = os.getenv("MEMORY_MODEL_NAME")
-
-        # 3. 初始化 Memory (传入刚创建的 client 和模型名)
-        self.memory = ChatMemory(
-            agent_state=self.agent_state,
-            llm_client=self.llm_client,
-            model_name=self.memory_model
-        )
-        self.main_agent = MainAgent()
+        
+        self.main_agent = MainAgent(self.agent_state)
+        self.coding_tool = CodingTool(self.agent_state)
 
         # 初始化 JS 进程管理器
         # 从环境变量读取命令行参数
@@ -77,18 +65,11 @@ class Agent:
 
         # 启动主循环
         try:
+            asyncio.create_task(self.main_agent.main_loop())
             await self.main_loop()
         finally:
             # 清理 JS 进程
             await self.js_manager.cleanup()
-
-    async def _background_think_and_execute(self):
-        # 使用锁，如果上一个任务没想完，新任务就在门外排队，不会同时乱走
-        async with self._think_lock:
-            async for decision in self.main_agent.think_stream(self.memory):
-                # 注意这里要加导入 import logging (如果是用 logger)
-                logger.info(f"📤 决策: {decision['type']} - {str(decision.get('content', ''))[:100]}")
-                await self.execute_decision(decision)
 
     async def main_loop(self):
         while True:
@@ -106,7 +87,17 @@ class Agent:
                 metadata=incoming_event.metadata
             )
 
-            if event.type == 'screenshot':
+            if event.type == 'user_chat':
+                logger.info(f"📥 收到聊天事件: {event.content}")
+                asyncio.create_task(self.main_agent.event_queue.put(event))
+
+            elif event.type == 'bot_chat':
+                asyncio.create_task(self.execute_decision(event))
+            
+            elif event.type == 'tool_call':
+                asyncio.create_task(self.coding_tool.tool_call(event))
+            
+            elif event.type == 'screenshot':
                 self.agent_state.timestamp_screenshot = event.timestamp
                 self.agent_state.last_screenshot = event.content
 
@@ -115,13 +106,13 @@ class Agent:
                 self.agent_state.timestamp_state = event.timestamp
                 self.agent_state.update_mc_state(event.content)
 
-            elif event.type == 'chat':
-                self.memory.add_event(event)
-                logger.info(f"📥 收到聊天事件: {event.content}")
-                
-                # 🔴 核心修改：不要在这里阻塞 await，创建后台任务！
-                asyncio.create_task(self._background_think_and_execute())
+            elif event.type == 'task_done':
+                logger.info(f"任务结束：{event.content}")
+                asyncio.create_task(self.main_agent.event_queue.put(event))
 
+            elif event.type == 'code_run_request':
+                asyncio.create_task(self.execute_decision(event))
+            
             elif event.type == 'code_run_result':
                 if incoming_event.error:
                     result_desc = f"代码执行失败: {incoming_event.error}"
@@ -135,22 +126,13 @@ class Agent:
                     logger.info("✅ 代码执行成功")
                 
                 event.content = result_desc
-                self.memory.add_event(event)
 
                 # 🔴 核心修改：不要在这里阻塞 await，创建后台任务！
-                asyncio.create_task(self._background_think_and_execute())
+                asyncio.create_task(self.coding_tool.receive_result(event))
 
             self.event_queue.task_done()
 
-    def record_command(self, cmd: OutgoingCommand):
-        self.memory.add_event(Event(
-            type=cmd.type,
-            content=cmd.payload,
-            source='bot',
-            metadata={}
-        ))
-
-    async def execute_decision(self, decision):
+    async def execute_decision(self, decision: Event):
         logger.debug(f"Executing: {decision['type']}")
 
         cmd = OutgoingCommand(
@@ -158,8 +140,6 @@ class Agent:
             target='minecraft',
             payload=decision['content'],
         )
-
-        self.record_command(cmd)
 
         await server.send_packet(cmd.model_dump())
 

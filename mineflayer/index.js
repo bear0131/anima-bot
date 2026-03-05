@@ -410,7 +410,7 @@ ws.on('message', async (data) => {
 
     const command = JSON.parse(data);
 
-    if (command.type === 'chat') {
+    if (command.type === 'bot_chat') {
         bot.chat(command.payload);
     } else if (command.type === 'code_run_request') {
         console.log("Executing code...");
@@ -639,7 +639,7 @@ ws.on('message', async (data) => {
 bot.on('chat', (username, message) => {
     if (username === bot.username) return;
     if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ source: 'minecraft', type: 'chat', content: message, metadata: { user: username } }));
+        ws.send(JSON.stringify({ source: 'minecraft', type: 'user_chat', content: message, metadata: { user: username } }));
     }
 });
 
