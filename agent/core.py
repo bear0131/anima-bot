@@ -24,7 +24,7 @@ class Agent:
 
         self.agent_state = AgentState()
         
-        self.main_agent = MainAgent(self.agent_state)
+        self.main_agent = MainAgent(self.agent_state, self.event_queue)
         self.coding_tool = CodingTool(self.agent_state)
 
         # 初始化 JS 进程管理器
@@ -86,7 +86,8 @@ class Agent:
                 source=incoming_event.source,
                 metadata=incoming_event.metadata
             )
-
+            
+            print(f"Received event: {event.type} from {event.source} with content: {event.content[:100]}...")
             if event.type == 'user_chat':
                 logger.info(f"📥 收到聊天事件: {event.content}")
                 asyncio.create_task(self.main_agent.event_queue.put(event))
@@ -102,7 +103,6 @@ class Agent:
                 self.agent_state.last_screenshot = event.content
 
             elif event.type == 'observation':
-                # 即使下面在大模型思考，这里的代码也会不断飞速执行！时间戳终于能更新了！
                 self.agent_state.timestamp_state = event.timestamp
                 self.agent_state.update_mc_state(event.content)
 
@@ -127,7 +127,6 @@ class Agent:
                 
                 event.content = result_desc
 
-                # 🔴 核心修改：不要在这里阻塞 await，创建后台任务！
                 asyncio.create_task(self.coding_tool.receive_result(event))
 
             self.event_queue.task_done()

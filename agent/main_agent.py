@@ -25,7 +25,7 @@ def get_llm_requests() -> List[Dict]:
 class MainAgent:
     _max_requests = 20  # 保留类变量用于实例访问
 
-    def __init__(self, agent_state: AgentState):
+    def __init__(self, agent_state: AgentState, core_event_queue: asyncio.Queue):
         # 加载 chat prompt
         prompts_dir = "agent/prompts"
         with open(f"{prompts_dir}/chat_system.txt", encoding="utf-8") as f:
@@ -37,13 +37,14 @@ class MainAgent:
         )
         self.chat_model = os.getenv("CHAT_MODEL_NAME", "gpt-4o-mini")
         self.event_queue = asyncio.Queue()
+        self.core_event_queue = core_event_queue
 
         self.llm_client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL") # 兼容第三方/中转
         )
 
-        # 获取用于记忆整理的模型名称 (默认用 mini 省钱)
+        # 获取用于记忆整理的模型名称
         self.memory_model = os.getenv("MEMORY_MODEL_NAME")
 
         self.agent_state = agent_state
@@ -59,10 +60,11 @@ class MainAgent:
             try:
                 incoming_event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
-                if not await self.js_manager.is_alive():
-                    pass 
+                # TODO?
                 continue
             self.memory.add_event(incoming_event)
+            async for event in self.think_stream(self.memory):
+                await self.core_event_queue.put(event)
 
     def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
         """保存 LLM 请求到历史记录"""
@@ -187,11 +189,12 @@ class MainAgent:
 
         # 如果有文本回复，先 yield 给用户
         if message.content:
-            yield {
-                "type": "chat",
-                "content": remove_think_tags(message.content),
-            }
-
+            chat_event = Event(
+                type="bot_chat",
+                content=remove_think_tags(message.content),
+                source="bot"
+            )
+            yield chat_event
         # 检查是否有 tool calls
         if message.tool_calls:
             # 处理所有 tool calls
@@ -208,16 +211,18 @@ class MainAgent:
 
                     # 调用 coding tool
                     print(f"calling task: {task_description}")
-                    code_result = await self.coding_tool.generate_code(
-                        task_description=task_description,
-                        memory=memory
-                    )
+
+                    coding_event = Event(
+                        type="tool_call",
+                        content=task_description,
+                        source="bot"
+                        )
+                    
+                    yield coding_event
                     
                     # [可选] 如果你也想在代码生成的返回中包含之前的 LLM 思考延迟，可以加进去
                     # code_result["llm_latency"] = latency 
 
-                    # yield code run request
-                    yield code_result
 
             # 注意：这里不再继续调用 LLM，直接返回
 
