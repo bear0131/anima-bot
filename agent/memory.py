@@ -263,7 +263,7 @@ class ChatMemory:
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
-        state_prompt = await self.state.render_state_for_prompt()
+        state_prompt = await self.state.render_state_for_prompt(vision=False)
         
         # 检查最后一条消息是否为 user，如果是则合并，如果不是则新建
         if messages and messages[-1]["role"] == "user":
@@ -271,7 +271,7 @@ class ChatMemory:
         else:
             messages.append({"role": "user", "content": state_prompt})
 
-        await self.wait_for_image()        
+        await self.state.wait_for_image()        
 
         # --- 4. 图像内容 ---
         if include_image and self.state.last_screenshot:
@@ -290,20 +290,6 @@ class ChatMemory:
             messages.append(img_msg)
 
         return messages
-    
-    async def wait_for_image(self):
-        call_time_ms = int(time.time() * 1000)
-        timeout = 60.0
-        elapsed = 0.0
-        poll_interval = 0.1
-        while elapsed < timeout:
-            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
-                break
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
-            
-        if elapsed >= timeout:
-            print(f"⚠️ [Warning] render_llm_context: 等待最新状态超时 ({timeout}s)，将使用当前缓存的数据。")
 
 # --------------------------------------------------------------------------------------------------------
 
@@ -502,14 +488,14 @@ class CodeMemory:
             elif event.type in ["code_run_result", "error"]:
                 messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
 
-        state_prompt = await self.state.render_state_for_prompt()
+        state_prompt = await self.state.render_state_for_prompt(vision=True)
 
         if messages and messages[-1]["role"] == "user":
             messages[-1]["content"] += f"\n{state_prompt}"
         else:
             messages.append({"role": "user", "content": state_prompt})
 
-        await self.wait_for_image()
+        await self.state.wait_for_image()
 
         if include_image and self.state.last_screenshot:
             img_msg = {
@@ -525,17 +511,3 @@ class CodeMemory:
             messages.append(img_msg)
 
         return messages
-
-    async def wait_for_image(self):
-        call_time_ms = int(time.time() * 1000)
-        timeout = 60.0
-        elapsed = 0.0
-        poll_interval = 0.1
-        while elapsed < timeout:
-            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
-                break
-            await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
-
-        if elapsed >= timeout:
-            print(f"⚠️ [Warning] render_llm_context: 等待最新截图超时 ({timeout}s)，将使用当前缓存的数据。")

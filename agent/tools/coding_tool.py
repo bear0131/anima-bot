@@ -2,6 +2,7 @@ import os
 import json
 import openai
 import asyncio
+import time
 from openai import AsyncOpenAI
 from typing import Dict, Any
 from agent.memory import CodeMemory
@@ -53,6 +54,8 @@ class CodingTool:
             model_name=self.memory_model
         )
 
+        self.running_time = 0
+
         self.task_id = 0
 
     def _load_control_primitives(self, primitive_names) -> str:
@@ -68,8 +71,11 @@ class CodingTool:
     async def receive_result(self, event: Event):
 
         task_description = f"总任务: {event.metadata['main_goal']}\n上次返回的结果: {event.content}\n\n请基于此继续生成代码，直到完成总任务。"
-        
-        code, plan, return_type = await self.generate_code(task_description)
+
+        if time.time() - self.running_time > 60:
+            task_description += "\n\n⚠️ 注意：距离上次返回已经超过60秒了，如果你在60秒内没有能够完成当前任务，我会告诉你，在下一次返回时视为任务结束，你需要在 `plan` 中总结之前的经验教训，并且 `code` 字段留空 (`\"\"`)。"
+
+        code, plan = await self.generate_code(task_description)
 
         if event.metadata["task_id"] != self.task_id:
             logger.warning(f"Received result for task_id {event.metadata['task_id']} but current task_id is {self.task_id}, ignoring...")
@@ -81,10 +87,12 @@ class CodingTool:
             content=event.content
         ))
 
-        if return_type == "task_done":
+        print(f"event 结果：{event.content}")
+
+        if code == "":
             return_event = Event(
                 type="task_done",
-                content=code,
+                content=plan,
                 source="coding_tool"
             )
         else:
@@ -118,6 +126,8 @@ class CodingTool:
 
         await self.memory.refresh_memory()
 
+        self.running_time = time.time()
+
         await self.receive_result(task_event)
 
 
@@ -137,18 +147,18 @@ class CodingTool:
             Dict with type="code_run_request", content, reason, metadata
         """
         # 准备 system prompt
-        system_content = self._system_template.replace("{programs}", self._programs_context)
+        system_content = self._system_template
 
         # 准备用户消息
         # 注意：这里不使用 render_llm_context，因为代码信息不应该进主 memory
         # 只需要当前游戏状态即可
-        messages = await self.memory.render_llm_context()
-        messages.append({"role": "system", "content": system_content})
+        messages = [{"role": "system", "content": system_content}]
+        history_messages = await self.memory.render_llm_context()
+        messages.extend(history_messages)
         messages.append({"role": "user", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
 
         max_retries = 3
         retry_delay = 5 # 秒
-
 
         for _ in range(max_retries):
             try:
@@ -171,17 +181,14 @@ class CodingTool:
             result_json = json.loads(remove_think_tags(response.choices[0].message.content))
             code = result_json.get("code", "")
             plan = result_json.get("plan", "")
-            return_type = result_json.get("type", "error")
         except Exception as e:
             code = "// 解析失败\n" + str(e)
             plan = f"JSON 解析错误: {str(e)}"
-            return_type = "error"
-
         print(f"\n{'='*60}")
         print(f"[Coding Tool] 💻 生成的代码:")
         print(f"  📋 计划: {plan}")
         print(f"  📜 代码:\n{code}")
         print(f"{'='*60}\n")
 
-        return code, plan, return_type
+        return code, plan
     

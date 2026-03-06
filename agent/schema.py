@@ -107,7 +107,7 @@ class AgentState(BaseModel):
         except Exception as e:
             print(f"[Error] Failed to parse observation: {e}")
     
-    async def render_state_for_prompt(self) -> str:
+    async def render_state_for_prompt(self, vision: bool) -> str:
         call_time_ms = int(time.time() * 1000)
 
         timeout = 60.0
@@ -129,7 +129,8 @@ class AgentState(BaseModel):
         lines = [f"### 当前游戏状态"]
         lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
-        lines.append(f"可见的方块: {mc.visible_blocks}")
+        if vision:
+            lines.append(f"可见的方块: {mc.visible_blocks}")
         lines.append(f"附近的掉落物: {mc.nearby_items}")
 
         newyaw = mc.yaw
@@ -155,7 +156,7 @@ class AgentState(BaseModel):
         elapsed = 0.0
         poll_interval = 0.1
         while elapsed < timeout:
-            if self.state.timestamp_screenshot and int(self.state.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
+            if self.timestamp_screenshot and int(self.timestamp_screenshot.timestamp() * 1000) >= call_time_ms:
                 break
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
