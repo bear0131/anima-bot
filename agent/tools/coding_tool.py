@@ -39,7 +39,19 @@ class CodingTool:
         )
         self.model_name = os.getenv("CODING_MODEL_NAME", "gpt-4o-2024-08-06")
         self.core_event_queue = core_event_queue
-        self.memory = CodeMemory()  # TODO: just for testing
+
+        self.llm_client = AsyncOpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL")
+        )
+
+        # 获取用于记忆整理的模型名称
+        self.memory_model = os.getenv("MEMORY_MODEL_NAME")
+        self.memory = CodeMemory(
+            agent_state=self.agent_state,
+            llm_client=self.llm_client,
+            model_name=self.memory_model
+        )
 
         self.task_id = 0
 
@@ -64,6 +76,7 @@ class CodingTool:
             return
         
         await self.memory.add_event(Event(
+            source='coding_tool',
             type='code_run_result',
             content=event.content
         ))
@@ -84,7 +97,7 @@ class CodingTool:
         
         await self.memory.add_event(Event(
             type="code_run_request",
-            contest={
+            content={
                 "plan": plan,
                 "code": code
             },
@@ -171,103 +184,4 @@ class CodingTool:
         print(f"{'='*60}\n")
 
         return code, plan, return_type
-
-#     async def generate_code(self, task_description: str, memory: ChatMemory) -> Dict[str, Any]:
-#         """
-#         生成 Minecraft JavaScript 代码
-
-#         Args:
-#             task_description: 任务描述（从 tool call 参数传入）
-#             memory: 记忆对象（用于获取游戏状态和上下文）
-
-#         Returns:
-#             Dict with type="code_run_request", content, reason, metadata
-#         """
-#         # 准备 system prompt
-#         system_content = self._system_template.replace("{programs}", self._programs_context)
-
-#         # 准备用户消息
-#         # 注意：这里不使用 render_llm_context，因为代码信息不应该进主 memory
-#         # 只需要当前游戏状态即可
-#         game_state = await memory.render_state_for_prompt()
-
-#         await memory.wait_for_image()
-
-#         img_msg = {
-#                 "role": "user", 
-#                 "content": [
-#                     {"type": "text", "text": "Current View:"},
-#                     {
-#                         "type": "image_url",
-#                         "image_url": {"url": f"data:image/jpeg;base64,{memory.state.last_screenshot}"}
-#                     }
-#                 ]
-#             }
-
-#         user_content = f"""### 任务
-# {task_description}
-
-# ### 当前游戏状态
-# {game_state}
-
-# 请生成相应的 JavaScript 代码。"""
-
-#         max_retries = 3
-#         retry_delay = 5 # 秒
-
-        
-#         #print(f"coding_tool game_state: {game_state}")
-
-#         for attempt in range(max_retries):
-#             try:
-#                 response = await self.client.chat.completions.create(
-#                     model=self.model_name,
-#                     messages=[
-#                         {"role": "system", "content": system_content},
-#                         {"role": "user", "content": user_content},
-#                         img_msg
-#                     ],
-#                     response_format={"type": "json_object"},
-#                     temperature=0.0,
-#                     timeout=10.0, 
-#                     reasoning_effort="low",
-#                 )
-#                 break
-#             except openai.APIConnectionError as e:
-#                 print(f"⚠️ 网络连接错误: {e} - Retrying...")
-#                 await asyncio.sleep(retry_delay)
-
-#         print(f"response: {response}")
-
-#         try:
-#             result_json = json.loads(remove_think_tags(response.choices[0].message.content))
-#             code = result_json.get("code", "")
-#             plan = result_json.get("plan", "")
-#         except Exception as e:
-#             code = "// 解析失败\n" + str(e)
-#             plan = f"JSON 解析错误: {str(e)}"
-
-#         print(f"\n{'='*60}")
-#         print(f"[Coding Tool] 💻 生成的代码:")
-#         print(f"  📋 计划: {plan}")
-#         print(f"  📜 代码:\n{code}")
-#         print(f"{'='*60}\n")
-
-#         # decision = Event(
-#         #     type="code_run_request",
-#         #     content=code,
-#         #     reason=plan,
-#         #     metadata={"source": "coding_tool"}
-#         # )
-
-#         return code, plan
     
-class DummyMemory:
-    async def add_event(self):
-        pass
-    
-    async def refresh_memory(self):
-        pass
-
-    async def render_llm_context(self):
-        return []

@@ -338,14 +338,11 @@ class CodeMemory:
         """
         return self.level1_events[-1] if self.level1_events else None
 
-    def add_event(self, event: Event):
+    async def add_event(self, event: Event):
         """
         添加事件到 Level 1。
         不再自动触发长期记忆重构。
         """
-        if event.type == "code_run_request":
-            return
-
         self.level1_events.append(event)
 
     def _load_memory(self):
@@ -384,7 +381,7 @@ class CodeMemory:
             target_events = list(self.level1_events)
 
             if not target_events:
-                print("⚠️ No events to consolidate.")
+                print("Warning: No events to consolidate.")
                 return
 
             current_memories = [
