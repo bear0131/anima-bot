@@ -107,6 +107,32 @@ class AgentState(BaseModel):
         except Exception as e:
             print(f"[Error] Failed to parse observation: {e}")
     
+    def render_state(self) -> str:
+        if not self.mc_state:
+            return "状态: 未知\n"
+
+        mc = self.mc_state
+        last_lines = [f"### 游戏状态"]
+        last_lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
+        last_lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
+
+        newyaw = mc.yaw
+        if newyaw < 0:
+            newyaw += 2 * math.pi
+
+        last_lines.append(f"我当前正看向 偏航角 yaw:{mc.yaw}, 俯仰角 pitch:{mc.pitch}")
+
+        if mc.pitch < -math.pi / 4:
+            last_lines.append("目前我正在朝下看")
+        if mc.pitch > math.pi / 4:
+            last_lines.append("目前我正在朝上看")
+
+        if mc.inventory:
+            items = [f"{n}x{c}" for n, c in mc.inventory.items()]
+            last_lines.append(f"物品: {', '.join(items)}")
+        last_lines = '\n'.join(last_lines) + '\n'
+        return last_lines
+    
     async def render_state_for_prompt(self, vision: bool) -> str:
         call_time_ms = int(time.time() * 1000)
 
@@ -147,8 +173,8 @@ class AgentState(BaseModel):
         if mc.inventory:
             items = [f"{n}x{c}" for n, c in mc.inventory.items()]
             lines.append(f"物品: {', '.join(items)}")
-
-        return '\n'.join(lines) + '\n'
+        lines = '\n'.join(lines) + '\n'
+        return lines
 
     async def wait_for_image(self):
         call_time_ms = int(time.time() * 1000)

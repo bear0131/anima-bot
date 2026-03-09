@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 import dotenv
 import os
-import math
+import copy
 
 from agent.schema import Event, AgentState, MemoryNode
 
@@ -25,10 +25,10 @@ class ChatMemory:
         os.makedirs(self.memory_dir, exist_ok=True)
 
         # --- 配置参数 ---
-        self.level1_limit = 5       # Level 1 容量 (原汁原味的 Event)
-        self.consolidate_batch = 5  # 每积累多少条新 Event 触发一次 Level 2 重构
+        self.level1_limit = 10       # Level 1 容量 (原汁原味的 Event)
+        self.consolidate_batch = 10  # 每积累多少条新 Event 触发一次 Level 2 重构
         self.level2_limit = 150       # Level 2 最大保留条数 (Pruning 阈值)
-        self.min_importance = 5     # Level 2 最小重要性阈值，低于此直接删除
+        self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
 
         # --- Level 1: 短期工作记忆 ---
         self.level1_events: deque[Event] = deque(maxlen=self.level1_limit)
@@ -58,15 +58,16 @@ class ChatMemory:
         2. 加入 Level 1 (Deque)。
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
+        _event = copy.copy(event)
         # 1. 过滤：code_run_request 包含大量代码，且通常紧接着 code_run_result，可以不记
-        if event.type == "code_run_request":
+        if _event.type == "code_run_request":
             return
-
+        _event.content = _event.content + '\n' + self.state.render_state()
         # 2. 加入 Level 1 (供 ChatContext 实时使用)
-        self.level1_events.append(event)
+        self.level1_events.append(_event)
 
         # 3. 加入缓冲区 (供 Level 2 重构使用)
-        self.consolidation_buffer.append(event)
+        self.consolidation_buffer.append(_event)
 
         # 4. 检查是否需要触发 Level 2 重构
         if len(self.consolidation_buffer) >= self.consolidate_batch:
@@ -267,7 +268,7 @@ class ChatMemory:
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
         state_prompt = await self.state.render_state_for_prompt(vision=False)
-        
+
         # 检查最后一条消息是否为 user，如果是则合并，如果不是则新建
         if messages and messages[-1]["role"] == "user":
             messages[-1]["content"] += f"\n{state_prompt}"
@@ -337,7 +338,12 @@ class CodeMemory:
         添加事件到 Level 1。
         不再自动触发长期记忆重构。
         """
-        self.level1_events.append(event)
+        _event = copy.copy(event)
+        if type(_event.content) == dict:
+            _event.content["state"] = self.state.render_state()
+        else:
+            _event.content = _event.content + '\n' + self.state.render_state()
+        self.level1_events.append(_event)
 
     def _load_memory(self):
         """从文件加载 Level 2 记忆。"""
@@ -491,7 +497,7 @@ class CodeMemory:
             elif event.type == "tool_call":
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
-        state_prompt = await self.state.render_state_for_prompt(vision=True)
+        state_prompt = await self.state.render_state_for_prompt(vision=False)
 
         if messages and messages[-1]["role"] == "user":
             messages[-1]["content"] += f"\n{state_prompt}"

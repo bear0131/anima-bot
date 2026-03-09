@@ -146,7 +146,7 @@ class CodingTool:
         # TODO: implement interrupt
         pass
 
-    async def generate_code(self, task_description: str) -> Dict[str, Any]:
+    async def generate_code(self, task_description: str) -> tuple[str, str]:
         """
         生成 Minecraft JavaScript 代码
 
@@ -161,8 +161,6 @@ class CodingTool:
         system_content = self._system_template
 
         # 准备用户消息
-        # 注意：这里不使用 render_llm_context，因为代码信息不应该进主 memory
-        # 只需要当前游戏状态即可
         messages = [{"role": "system", "content": system_content}]
         history_messages = await self.memory.render_llm_context()
         messages.extend(history_messages)
