@@ -1,4 +1,4 @@
-async function craftItem(bot, name, count = 1) {
+async function craftItem(bot, name, craftingTablePos, count = 1) {
     // return if name is not string
     if (typeof name !== "string") {
         throw new Error("name for craftItem must be a string");
@@ -11,19 +11,13 @@ async function craftItem(bot, name, count = 1) {
     if (!itemByName) {
         throw new Error(`No item named ${name}`);
     }
-    const craftingTable = bot.findBlock({
-        matching: mcData.blocksByName.crafting_table.id,
-        maxDistance: 32,
-    });
-    if (!craftingTable) {
-        report("Craft without a crafting table");
-    } else {
-        await bot.pathfinder.goto(
-            new GoalLookAtBlock(craftingTable.position, bot.world)
-        );
-        bot.pathfinder.setGoal(null);
-        await bot.waitForTicks(10); 
+    if (craftingTablePos && bot.entity.position.distanceTo(craftingTablePos) > 4){
+        report("Too far away from the crafting table");
+        return;
     }
+    let craftingTable = null;
+    if (craftingTablePos)
+        craftingTable = bot.blockAt(craftingTablePos);
     const recipe = bot.recipesFor(itemByName.id, null, 1, craftingTable)[0];
     if (recipe) {
         report(`Crafting ${name} x${count}`);
@@ -35,11 +29,5 @@ async function craftItem(bot, name, count = 1) {
         }
     } else {
         failedCraftFeedback(bot, name, itemByName, craftingTable);
-        _craftItemFailCount++;
-        if (_craftItemFailCount > 10) {
-            throw new Error(
-                "craftItem failed too many times, check chat log to see what happened"
-            );
-        }
     }
 }

@@ -1,7 +1,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const mineflayer = require('mineflayer');
-const { mineflayer: mineflayerViewer } = require('prismarine-viewer');
+const { mineflayer: mineflayerViewer } = require('D:/anima-bot/mineflayer/prismarine-viewer');
 const puppeteer = require('puppeteer');
 
 // ============================================================
@@ -35,7 +35,7 @@ const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
     port: process.env.MINECRAFT_PORT ? parseInt(process.env.MINECRAFT_PORT) : 25565,
     username: process.env.BOT_USERNAME || 'CameraTestBot',
-    version: process.env.MINECRAFT_VERSION || '1.19'
+    version: process.env.MINECRAFT_VERSION || '1.18.2'
 });
 
 let browser = null;
@@ -50,7 +50,7 @@ bot.once('spawn', async () => {
         mineflayerViewer(bot, {
             port: viewerPort,
             firstPerson: true,
-            viewDistance: 12,
+            viewDistance: 6,
         });
         console.log(`[Viewer] Started on http://localhost:${viewerPort}`);
 
@@ -112,7 +112,7 @@ bot.once('spawn', async () => {
             // 粗略过滤掉常见的内置对象
             return iframeKeys.filter(k => !/^(webkit|on|DOM|CSS|HTML|crypto|chrome|speech)/.test(k));
         });
-        console.log('[Debug] 当前 window 上存在的非标准全局变量有:', globalKeys);
+        // console.log('[Debug] 当前 window 上存在的非标准全局变量有:', globalKeys);
 
         // 取消单纯的等待死停顿，马上开始执行测试逻辑（测试逻辑里面包含了轮询等待）
         await runCameraTests();
@@ -128,6 +128,7 @@ bot.once('spawn', async () => {
 // ============================================================
 
 async function runCameraTests() {
+        /*
     console.log('\n=== 开始相机系统测试 ===\n');
 
     // --- 测试 1: 修改 FOV (广角) ---
@@ -221,9 +222,12 @@ async function runCameraTests() {
         });
     });
 
-    console.log('=== 测试环境就绪，正在运行... ===\n');
+    console.log('=== 测试环境就绪，正在运行... ===\n');*/
 
     const checkInterval = setInterval(async () => {
+        console.log('checking');
+        //const shouldQuit = await page.evaluate(() => window.testQuit);
+        /*
         try {
             const shouldQuit = await page.evaluate(() => window.testQuit);
             if (shouldQuit) {
@@ -236,7 +240,8 @@ async function runCameraTests() {
             console.log('[System] 浏览器页面已关闭，正在退出...');
             cleanupAndExit(0);
         }
-    }, 500);
+            */
+    }, 10000);
 }
 
 // ============================================================

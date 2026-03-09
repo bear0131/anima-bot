@@ -1,7 +1,8 @@
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const WebSocket = require('ws');
-const { mineflayer: mineflayerViewer } = require('prismarine-viewer')
+const { mineflayer: mineflayerViewer } =
+  require('./prismarine-viewer')
 const puppeteer = require('puppeteer')
 
 // ============================================================
@@ -219,7 +220,7 @@ const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
     port: process.env.MINECRAFT_PORT ? parseInt(process.env.MINECRAFT_PORT) : 25565,
     username: process.env.BOT_USERNAME || 'animabot',
-    version: '1.19'
+    version: '1.18.2'
 });
 VIEWER_PORT = 3007;
 
@@ -253,7 +254,7 @@ bot.once('spawn', async () => {
         mineflayerViewer(bot, {
             port: VIEWER_PORT,
             firstPerson: true,
-            viewDistance: 12,
+            viewDistance: 6,
         });
         console.log(`Viewer started on port ${VIEWER_PORT}`);
 
@@ -262,14 +263,6 @@ bot.once('spawn', async () => {
             browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
             page = await browser.newPage();
 
-            await page.evaluate(() => {
-                // viewer 是 prismarine-viewer 在网页端暴露的全局对象
-                if (window.viewer && window.viewer.camera) {
-                    window.viewer.camera.fov = 100; // 默认大概是 60-70，你可以调大到 90 或 100
-                    window.viewer.camera.updateProjectionMatrix(); // 更新相机矩阵让广角生效
-                }
-            });
-
             // 设置视口大小
             await page.setViewport({ width: 1920, height: 1080 });
 
@@ -277,9 +270,10 @@ bot.once('spawn', async () => {
             await page.setRequestInterception(true);
 
             page.on('request', async (request) => {
+                console.error('request come');
                 const url = request.url();
                 // 拦截我们本地 viewer 服务的所有 js 文件
-                if (url.endsWith('.js') && url.includes(`localhost:${VIEWER_PORT}`)) {
+                if (url.endsWith('.js') && url.includes(`localhost:${VIEWER_PORT}`) && 0) {
                     try {
                         // 在 Node.js 端用 fetch 把真实代码拉下来
                         const response = await fetch(url);
@@ -385,15 +379,6 @@ bot.once('spawn', async () => {
         });
     }, 500); // 500ms = 0.5秒
 });
-
-async function getGameScreenshot() {
-    if (!page) return null;
-
-    // 截图并获取 Base64 字符串 (多模态模型通常需要 Base64)
-    // 格式通常是: "data:image/png;base64,....."
-    const screenshotBuffer = await page.screenshot({ encoding: 'base64' });
-    return screenshotBuffer;
-}
 
 // --- 核心逻辑 ---
 ws.on('message', async (data) => {

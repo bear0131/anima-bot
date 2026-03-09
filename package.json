@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "minecraft-data": "^3.105.0",
+    "prismarine-viewer": "^1.33.0"
+  }
+}

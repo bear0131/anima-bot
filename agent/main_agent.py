@@ -64,6 +64,7 @@ class MainAgent:
                 continue
             self.memory.add_event(incoming_event)
             async for event in self.think_stream(self.memory):
+                self.memory.add_event(event)
                 await self.core_event_queue.put(event)
 
     def _save_llm_request(self, messages: List[Dict], response: Dict, latency: float):
@@ -118,8 +119,6 @@ class MainAgent:
 
         # 检查 last_event (逻辑保持不变)
         last_event = memory.get_last_event()
-        if last_event and last_event.type == "chat":
-            pass
 
         # [新增] 1. 开始计时
         start_time = time.time()

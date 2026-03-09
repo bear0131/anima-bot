@@ -68,26 +68,37 @@ class CodingTool:
                     programs.append(f.read())
         return "\n\n".join(programs)
 
-    async def receive_result(self, event: Event):
+    async def receive_result(self, event: Event, first_time=False):
 
-        task_description = f"总任务: {event.metadata['main_goal']}\n上次返回的结果: {event.content}\n\n请基于此继续生成代码，直到完成总任务。"
+        task_description = ""
+        if first_time:
+            task_description = f"总任务: {event.metadata['main_goal']}\n请基于此生成代码，直到完成总任务。"
+        else:
+            task_description = f"总任务: {event.metadata['main_goal']}\n上次返回的结果: {event.content}\n\n请基于此继续生成代码，直到完成总任务。"
 
         if time.time() - self.running_time > 60:
             task_description += "\n\n⚠️ 注意：距离上次返回已经超过60秒了，如果你在60秒内没有能够完成当前任务，我会告诉你，在下一次返回时视为任务结束，你需要在 `plan` 中总结之前的经验教训，并且 `code` 字段留空 (`\"\"`)。"
 
-        code, plan = await self.generate_code(task_description)
+        if first_time:
+            await self.memory.add_event(Event(
+                source='user',
+                type='tool_call',
+                content=event.content
+            ))
+        else:
+            await self.memory.add_event(Event(
+                source='coding_tool',
+                type='code_run_result',
+                content=event.content
+            ))
+
+        print(f"event 结果：{event.content}")
 
         if event.metadata["task_id"] != self.task_id:
             logger.warning(f"Received result for task_id {event.metadata['task_id']} but current task_id is {self.task_id}, ignoring...")
             return
-        
-        await self.memory.add_event(Event(
-            source='coding_tool',
-            type='code_run_result',
-            content=event.content
-        ))
 
-        print(f"event 结果：{event.content}")
+        code, plan = await self.generate_code(task_description)
 
         if code == "":
             return_event = Event(
@@ -128,7 +139,7 @@ class CodingTool:
 
         self.running_time = time.time()
 
-        await self.receive_result(task_event)
+        await self.receive_result(task_event, first_time=True)
 
 
     async def interrupt(self):

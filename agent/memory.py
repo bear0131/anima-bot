@@ -243,15 +243,15 @@ class ChatMemory:
             # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
             messages.append({"role": "user", "content": memory_text})
 
+        print(f"level1_events: {self.level1_events}")
+
         # --- 2. Level 1 事件流 ---
         for event in self.level1_events:
-            if event.type == "chat":
-                if event.source == 'bot':
-                    messages.append({"role": "assistant", "content": event.content})
-                else:
-                    # 转化规则：user -> user
-                    username = event.metadata.get('user', 'unknown')
-                    messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
+            if event.type == 'bot_chat':
+                messages.append({"role": "assistant", "content": event.content})
+            elif event.type == 'user_chat':
+                username = event.metadata.get('user', 'unknown')
+                messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
 
             elif event.type == "code_run_request":
                 # 转化规则：assistant -> model
@@ -260,6 +260,9 @@ class ChatMemory:
             elif event.type in ["code_run_result", "error"]:
                 # 转化规则：原本的 system -> user (环境反馈)
                 messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
+                
+            elif event.type == "tool_call":
+                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
@@ -302,6 +305,11 @@ class CodeMemory:
         self.memory_dir = os.path.join('memory', world_name)
         self.memory_file = os.path.join(self.memory_dir, 'memory_code.json')
         os.makedirs(self.memory_dir, exist_ok=True)
+
+        prompts_dir = os.getenv("PROMPT_PATH", "agent/prompts")
+        prompt_path = os.path.join(prompts_dir, "code_memory.txt")
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            self.system_instruction = f.read()
 
         # --- 配置参数 ---
         self.level2_limit = 20
@@ -365,6 +373,7 @@ class CodeMemory:
         """
         async with self.lock:
             target_events = list(self.level1_events)
+            self.level1_events.clear()
 
             if not target_events:
                 print("Warning: No events to consolidate.")
@@ -380,23 +389,15 @@ class CodeMemory:
                 sender = e.metadata.get('user', e.source) if getattr(e, "metadata", None) else e.source
                 new_events_text += f"[{e.type}] {sender}: {e.content}\n"
 
-            system_instruction = """
-你是一个总结 MC bot 的日志信息的 bot。
-请将新的日志和之前总结好的信息进行整理合并成一条条的总结。
-
-输出 JSON，格式如下：
-{"memories": [{"content": "string", "importance": 0-100}]}
-"""
-
             user_data = f"""
-### Current Knowledge Base (Level 2 Memory):
-{json.dumps(current_memories, ensure_ascii=False, indent=2)}
+            ### Current Knowledge Base (Level 2 Memory):
+            {json.dumps(current_memories, ensure_ascii=False, indent=2)}
 
-### 最近日志(新信息):
-{new_events_text}
-
-总结这些日志。
-"""
+            ### Recent Events (New Information):
+            {new_events_text}
+            
+            Please consolidate these memories now.
+            """
 
             try:
                 if not self.llm_client:
@@ -406,7 +407,7 @@ class CodeMemory:
                 response = await self.llm_client.chat.completions.create(
                     model=self.model_name,
                     messages=[
-                        {"role": "user", "content": f"SYSTEM: {system_instruction}\n\nDATA: {user_data}"}
+                        {"role": "user", "content": f"SYSTEM: {self.system_instruction}\n\nDATA: {user_data}"}
                     ],
                     response_format={"type": "json_object"}
                 )
@@ -475,18 +476,20 @@ class CodeMemory:
             messages.append({"role": "user", "content": memory_text})
 
         for event in self.level1_events:
-            if event.type == "chat":
-                if event.source == 'bot':
-                    messages.append({"role": "assistant", "content": event.content})
-                else:
-                    username = event.metadata.get('user', 'unknown')
-                    messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
+            if event.type == 'bot_chat':
+                messages.append({"role": "assistant", "content": event.content})
+            elif event.type == 'user_chat':
+                username = event.metadata.get('user', 'unknown')
+                messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
 
             elif event.type == "code_run_request":
                 messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
 
             elif event.type in ["code_run_result", "error"]:
                 messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
+                
+            elif event.type == "tool_call":
+                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
         state_prompt = await self.state.render_state_for_prompt(vision=True)
 
@@ -494,6 +497,8 @@ class CodeMemory:
             messages[-1]["content"] += f"\n{state_prompt}"
         else:
             messages.append({"role": "user", "content": state_prompt})
+        
+        print(messages)
 
         await self.state.wait_for_image()
 
