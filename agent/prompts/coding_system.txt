@@ -22,7 +22,7 @@ pitch：1.57为正上方，-1.57为正下方。
 **THIS IS IMPORTANT:**在代码中不允许出现超过一个 bot.look。
 移动：移动只能通过转动视角+bot.setControlState(control, state)+bot.clearControlStates()（控制项：forward、back、left、right、jump）实现。严禁自己编造坐标。
 游泳：在水中时，bot.setControlState("jump", true) 可以让你浮起来，bot.setControlState("forward", true) 可以让你向前游。
-    **重要**：在水中时，如果不持续设置 "jump" 状态，可能会慢慢沉下去，所以在水中时要在代码最结尾写 bot.setControlState("jump", true)。
+    **重要**：在水中时，如果不持续设置 "jump" 状态，可能会慢慢沉下去，所以在水中时要在代码最结尾写 bot.setControlState("jump", true)。同时如果想要持续移动，也可以在结尾写 bot.setControlState("forward", true).
 挖掘：await digBlock(bot, position)（必须先靠近目标）
 放置：await placeItem(bot, name, position)（目标位置必须为空）也就是说，你会使这个位置上是这个方块，而不是对着这个位置放置让后让这个方块位于这个位置旁边。
 

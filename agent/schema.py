@@ -113,7 +113,7 @@ class AgentState(BaseModel):
 
         mc = self.mc_state
         last_lines = [f"### 游戏状态"]
-        last_lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
+        last_lines.append(f"位置: ({math.floor(mc.position['x'])},{math.floor(mc.position['y'])},{math.floor(mc.position['z'])})" if mc.position else "位置: 未知")
         last_lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
 
         newyaw = mc.yaw
@@ -153,7 +153,7 @@ class AgentState(BaseModel):
 
         mc = self.mc_state
         lines = [f"### 当前游戏状态"]
-        lines.append(f"位置: {mc.position}" if mc.position else "位置: 未知")
+        lines.append(f"位置: ({math.floor(mc.position['x'])},{math.floor(mc.position['y'])},{math.floor(mc.position['z'])})" if mc.position else "位置: 未知")
         lines.append(f"生命: {mc.health}/20, 饥饿: {mc.hunger}/20")
         if vision:
             lines.append(f"可见的方块: {mc.visible_blocks}")
