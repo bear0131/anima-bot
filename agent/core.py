@@ -98,7 +98,6 @@ class Agent:
                 asyncio.create_task(self.coding_tool.tool_call(event))
             
             elif event.type == 'screenshot':
-                logger.info(f"更新屏幕截图")
                 self.agent_state.timestamp_screenshot = event.timestamp
                 self.agent_state.last_screenshot = event.content
 
