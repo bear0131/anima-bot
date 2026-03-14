@@ -136,6 +136,7 @@ class MainAgent:
         for attempt in range(max_retries):
             try:
                 # === 原有的 API 调用代码 ===
+                print(self.chat_model)
                 response = await self.client.chat.completions.create(
                     model=self.chat_model,
                     messages=conversation_context,

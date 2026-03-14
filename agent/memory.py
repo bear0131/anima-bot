@@ -253,21 +253,16 @@ class ChatMemory:
             elif event.type == 'user_chat':
                 username = event.metadata.get('user', 'unknown')
                 messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
-
-            elif event.type == "code_run_request":
-                # 转化规则：assistant -> model
-                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
-            
-            elif event.type in ["code_run_result", "error"]:
-                # 转化规则：原本的 system -> user (环境反馈)
-                messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
                 
             elif event.type == "tool_call":
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
+                
+            elif event.type == "task_done":
+                messages.append({"role": "assistant", "content": f"[Mission End] {event.content}"})
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
-        state_prompt = await self.state.render_state_for_prompt(vision=False)
+        state_prompt = await self.state.render_state_for_prompt(vision=True)
 
         # 检查最后一条消息是否为 user，如果是则合并，如果不是则新建
         if messages and messages[-1]["role"] == "user":
@@ -287,7 +282,10 @@ class ChatMemory:
                     {"type": "text", "text": "Current View:"},
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{self.state.last_screenshot}"}
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot}",
+                            "detail": "low"
+                        }
                     }
                 ]
             }
@@ -497,14 +495,13 @@ class CodeMemory:
             elif event.type == "tool_call":
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
-        state_prompt = await self.state.render_state_for_prompt(vision=False)
+        state_prompt = await self.state.render_state_for_prompt(vision=True)
 
         if messages and messages[-1]["role"] == "user":
             messages[-1]["content"] += f"\n{state_prompt}"
         else:
             messages.append({"role": "user", "content": state_prompt})
         
-        print(messages)
 
         await self.state.wait_for_image()
 

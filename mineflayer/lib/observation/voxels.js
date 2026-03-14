@@ -43,7 +43,7 @@ class VisibleBlocks extends Observation {
     constructor(bot, options = {}) {
         super(bot);
         this.name = "visibleBlocks";
-        this.distance = options.distance || 4;
+        this.distance = options.distance || 6;
     }
 
     observe() {

@@ -264,7 +264,7 @@ bot.once('spawn', async () => {
             page = await browser.newPage();
 
             // 设置视口大小
-            await page.setViewport({ width: 1920, height: 1080 });
+            await page.setViewport({ width: 480, height: 270 });
 
             // 在 navigation (page.goto) 之前插入
             await page.setRequestInterception(true);

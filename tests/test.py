@@ -9,14 +9,14 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="gemini-3-flash-preview",
+    model="gemini-2.5-pro",
     messages=[
         {   "role": "system",
             "content": "You are a helpful assistant."
         },
         {
             "role": "user",
-            "content": "你会用 mineflayer 写 bot 代码吗，你不依赖 setcontrolstate 和 pathfinder 写一个向前走一格的代码"
+            "content": "你好"
         }
     ]
 )

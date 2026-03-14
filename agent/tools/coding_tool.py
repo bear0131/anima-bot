@@ -99,8 +99,19 @@ class CodingTool:
             return
 
         code, plan = await self.generate_code(task_description)
+        
+        await self.memory.add_event(Event(
+            type="code_run_request",
+            content={
+                "plan": plan,
+                "code": code
+            },
+            source="coding_tool",
+            metadata={"main_goal": event.metadata["main_goal"]},
+        ))
 
         if code == "":
+            asyncio.create_task(self.memory.refresh_memory())
             return_event = Event(
                 type="task_done",
                 content=plan,
@@ -114,28 +125,18 @@ class CodingTool:
                 metadata={"task_id": event.metadata["task_id"], "main_goal": event.metadata["main_goal"]},
             )
         
-        await self.memory.add_event(Event(
-            type="code_run_request",
-            content={
-                "plan": plan,
-                "code": code
-            },
-            source="coding_tool",
-            metadata={"main_goal": event.metadata["main_goal"]},
-        ))
-        
         await self.core_event_queue.put(return_event)
             
     async def tool_call(self, event: Event):
 
         await self.interrupt() # TODO
 
+        async with self.memory.lock:
+            pass
         self.task_id += 1
         task_event = event
         task_event.metadata["task_id"] = self.task_id
         task_event.metadata["main_goal"] = event.content
-
-        await self.memory.refresh_memory()
 
         self.running_time = time.time()
 
@@ -176,7 +177,7 @@ class CodingTool:
                     messages=messages,
                     response_format={"type": "json_object"},
                     temperature=0.0,
-                    timeout=10.0,
+                    #timeout=10.0,
                     reasoning_effort="low",
                 )
                 break
@@ -184,7 +185,7 @@ class CodingTool:
                 print(f"⚠️ 网络连接错误: {e} - Retrying...")
                 await asyncio.sleep(retry_delay)
 
-        print(f"response: {response}")
+        #print(f"response: {response}")
 
         try:
             result_json = json.loads(remove_think_tags(response.choices[0].message.content))
