@@ -244,8 +244,6 @@ class ChatMemory:
             # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
             messages.append({"role": "user", "content": memory_text})
 
-        print(f"level1_events: {self.level1_events}")
-
         # --- 2. Level 1 事件流 ---
         for event in self.level1_events:
             if event.type == 'bot_chat':
@@ -273,23 +271,35 @@ class ChatMemory:
         await self.state.wait_for_image()        
 
         # --- 4. 图像内容 ---
-        if include_image and self.state.last_screenshot:
-            # Gemini 视觉通常附加在 user 消息的 parts 中
-            # 如果你保持 OpenAI 兼容格式，只需确保 role 是 user
-            img_msg = {
+        if include_image and self.state.last_screenshot_front and self.state.last_screenshot_back:
+            img_msg_front = {
                 "role": "user", 
                 "content": [
-                    {"type": "text", "text": "Current View:"},
+                    {"type": "text", "text": "前方的视野:"},
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot}",
+                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_front}",
                             "detail": "low"
                         }
                     }
                 ]
             }
-            messages.append(img_msg)
+            messages.append(img_msg_front)
+            img_msg_back = {
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": "后方的视野(正后方,yaw 增加 pi,pitch 取相反数):"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_back}",
+                            "detail": "low"
+                        }
+                    }
+                ]
+            }
+            messages.append(img_msg_back)
 
         return messages
 
@@ -479,21 +489,24 @@ class CodeMemory:
                 memory_text += f"- {node.content} (Imp: {node.importance})\n"
             messages.append({"role": "user", "content": memory_text})
 
+        event_list = deque(maxlen=6)
+
         for event in self.level1_events:
-            if event.type == 'bot_chat':
-                messages.append({"role": "assistant", "content": event.content})
-            elif event.type == 'user_chat':
-                username = event.metadata.get('user', 'unknown')
-                messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
+            if event.type == "tool_call":
+                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
             elif event.type == "code_run_request":
+                event_list.append(event)
+
+            elif event.type in ["code_run_result", "error"]:
+                event_list.append(event)
+        
+        for event in event_list:
+            if event.type == "code_run_request":
                 messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
 
             elif event.type in ["code_run_result", "error"]:
                 messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
-                
-            elif event.type == "tool_call":
-                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
 
         state_prompt = await self.state.render_state_for_prompt(vision=True)
 
@@ -505,17 +518,34 @@ class CodeMemory:
 
         await self.state.wait_for_image()
 
-        if include_image and self.state.last_screenshot:
-            img_msg = {
-                "role": "user",
+        if include_image and self.state.last_screenshot_front and self.state.last_screenshot_back:
+            img_msg_front = {
+                "role": "user", 
                 "content": [
-                    {"type": "text", "text": "Current View:"},
+                    {"type": "text", "text": "前方的视野:"},
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{self.state.last_screenshot}"}
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_front}",
+                            "detail": "low"
+                        }
                     }
                 ]
             }
-            messages.append(img_msg)
+            messages.append(img_msg_front)
+            img_msg_back = {
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": "后方的视野(正后方,yaw 增加 pi,pitch 取相反数):"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_back}",
+                            "detail": "low"
+                        }
+                    }
+                ]
+            }
+            messages.append(img_msg_back)
 
         return messages

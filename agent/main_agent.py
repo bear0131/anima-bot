@@ -129,14 +129,13 @@ class MainAgent:
         retry_delay = 5 # 秒
 
         print(f"main_agent messages: ")
-        for mp in conversation_context[1:-1]:
+        for mp in conversation_context[1:-2]:
             print(f"role: {mp["role"]}")
             s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
             print(f"content: {s}")
         for attempt in range(max_retries):
             try:
                 # === 原有的 API 调用代码 ===
-                print(self.chat_model)
                 response = await self.client.chat.completions.create(
                     model=self.chat_model,
                     messages=conversation_context,
@@ -144,6 +143,7 @@ class MainAgent:
                     temperature=0.8,
                     max_tokens=10000,
                 )
+                print("token: ", response.usage.total_tokens)
                 break
                 # =========================
 

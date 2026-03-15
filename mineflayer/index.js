@@ -223,6 +223,7 @@ const bot = mineflayer.createBot({
     version: '1.18.2'
 });
 VIEWER_PORT = 3007;
+BACKVIEW_VIEWER_PORT = 3008;
 
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(tool);
@@ -240,7 +241,8 @@ globalWs = ws;
 startMemoryMonitoring();
 
 let browser = null
-let page = null
+let page_front = null
+let page_back = null
 
 ws.on('open', () => {
     console.log('Connected to Brain!');
@@ -255,18 +257,29 @@ bot.once('spawn', async () => {
             port: VIEWER_PORT,
             firstPerson: true,
             viewDistance: 6,
+            backview: false
         });
         console.log(`Viewer started on port ${VIEWER_PORT}`);
+        mineflayerViewer(bot, {
+            port: BACKVIEW_VIEWER_PORT,
+            firstPerson: true,
+            viewDistance: 6,
+            backview: true
+        });
+        console.log(`Backview Viewer started on port ${BACKVIEW_VIEWER_PORT}`);
 
         try {
             // 3. 启动 Puppeteer
             browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
-            page = await browser.newPage();
+            page_front = await browser.newPage();
+            page_back = await browser.newPage();
 
             // 设置视口大小
-            await page.setViewport({ width: 480, height: 270 });
+            await page_front.setViewport({ width: 480, height: 270 });
+            await page_back.setViewport({ width: 480, height: 270 });
 
             // 在 navigation (page.goto) 之前插入
+            /*
             await page.setRequestInterception(true);
 
             page.on('request', async (request) => {
@@ -300,9 +313,10 @@ bot.once('spawn', async () => {
                     request.continue();
                 }
             });
-
+            */
             // 访问 Viewer 页面
-            await page.goto('http://localhost:3007');
+            await page_front.goto('http://localhost:3007');
+            await page_back.goto('http://localhost:3008');
 
             // 等待页面加载
             await new Promise(r => setTimeout(r, 2000));
@@ -340,22 +354,32 @@ bot.once('spawn', async () => {
         let snapshotPromise = Promise.resolve();
 
         // 如果可以截图，则执行截图操作
-        if (enablePrismarineViewer && ws.readyState == WebSocket.OPEN && !isSnapshotting && page) {
+        if (enablePrismarineViewer && ws.readyState == WebSocket.OPEN && !isSnapshotting && page_front && page_back) {
             isSnapshotting = true;
-            snapshotPromise = page.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 })
-                .then(base64Data => {
-                    ws.send(JSON.stringify({
-                        source: 'minecraft',
-                        type: 'screenshot',
-                        content: base64Data,
-                        timestamp: Date.now(),
-                        metadata: { user: 'system' }
-                    }));
-                })
-                .catch(e => console.error('Snapshot error:', e))
-                .finally(() => isSnapshotting = false);
-        }
 
+            // 使用 Promise.all 同时截取两张图
+            snapshotPromise = Promise.all([
+                page_front.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 }),
+                page_back.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 })
+            ])
+            .then(([frontBase64, backBase64]) => {
+                // 将两张图的数据放入 content 对象中发送
+                ws.send(JSON.stringify({
+                    source: 'minecraft',
+                    type: 'screenshot',
+                    content: {
+                        front: frontBase64,
+                        back: backBase64
+                    },
+                    timestamp: Date.now(),
+                    metadata: { user: 'system' }
+                }));
+            })
+            .catch(e => console.error('Snapshot error:', e))
+            .finally(() => {
+                isSnapshotting = false;
+            });
+        }
         // 发送文字状态信息
         snapshotPromise.then(() => {
             try {

@@ -99,7 +99,8 @@ class Agent:
             
             elif event.type == 'screenshot':
                 self.agent_state.timestamp_screenshot = event.timestamp
-                self.agent_state.last_screenshot = event.content
+                self.agent_state.last_screenshot_front = event.content["front"]
+                self.agent_state.last_screenshot_back = event.content["back"]
 
             elif event.type == 'observation':
                 self.agent_state.timestamp_state = event.timestamp

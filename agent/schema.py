@@ -58,7 +58,8 @@ class AgentState(BaseModel):
     """全局状态黑板"""
     status: str = "IDLE"
     mc_state: Optional[MCState] = None
-    last_screenshot: Optional[str] = None
+    last_screenshot_front: Optional[str] = None
+    last_screenshot_back: Optional[str] = None
     timestamp_state: Optional[float] = None
     timestamp_screenshot: Optional[float] = None
     

@@ -178,14 +178,13 @@ class CodingTool:
                     response_format={"type": "json_object"},
                     temperature=0.0,
                     #timeout=10.0,
-                    reasoning_effort="low",
+                    #reasoning_effort="low",
                 )
+                print("token: ", response.usage.total_tokens)
                 break
             except openai.APIConnectionError as e:
                 print(f"⚠️ 网络连接错误: {e} - Retrying...")
                 await asyncio.sleep(retry_delay)
-
-        #print(f"response: {response}")
 
         try:
             result_json = json.loads(remove_think_tags(response.choices[0].message.content))
