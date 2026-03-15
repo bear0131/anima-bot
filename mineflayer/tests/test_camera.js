@@ -1,7 +1,11 @@
+// 如何使用：
+// 在主文件夹里运行：
+// node mineflayer/tests/test_camera.js --headless=false
+
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+require('dotenv').config({ path: path.join(__dirname, '../../.env'), override: true });
 const mineflayer = require('mineflayer');
-const { mineflayer: mineflayerViewer } = require('D:/anima-bot/mineflayer/prismarine-viewer');
+const { mineflayer: mineflayerViewer } = require(path.resolve('.\\mineflayer\\prismarine-viewer'))
 const puppeteer = require('puppeteer');
 
 // ============================================================
@@ -29,7 +33,7 @@ console.log(`[Config] Target FOV: ${TARGET_FOV}`);
 
 // ============================================================
 //  初始化 Bot
-// ============================================================
+// ============================================================、
 
 const bot = mineflayer.createBot({
     host: process.env.MINECRAFT_HOST || 'localhost',
@@ -56,13 +60,27 @@ bot.once('spawn', async () => {
 
         // 2. 启动 Puppeteer
         console.log('[Puppeteer] Launching browser...');
+
         browser = await puppeteer.launch({
-            headless: headlessMode,
-            // devtools: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            headless: false, // 调试时必须开启界面
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            dumpio: true // <--- 关键：这会将 Chrome 的 stderr/stdout 输出到你的控制台
         });
 
         page = await browser.newPage();
+
+        // --- 新增调试代码 Start ---
+        // 1. 将浏览器内部的 console 打印到你的终端
+        page.on('console', msg => console.log('[Browser Log]:', msg.text()));
+
+        // 2. 监听页面崩溃事件
+        page.on('error', err => console.error('[Browser Crash]:', err));
+        page.on('pageerror', err => console.error('[Browser JS Error]:', err));
+
+        // 3. 启动参数增加 dumpio，把浏览器的标准输出导出来（捕捉底层崩溃）
+        // 修改你的 launch 代码如下：
+        // --- 新增调试代码 End ---
+
         await page.setViewport({ width: 1280, height: 720 });
 
         // 在 navigation (page.goto) 之前插入
@@ -106,17 +124,7 @@ bot.once('spawn', async () => {
         // 等待基础 HTML 框架建立
         await page.goto(`http://localhost:${viewerPort}`, { waitUntil: 'domcontentloaded' });
 
-        // 获取所有的全局变量键名并过滤掉浏览器自带的常见属性
-        const globalKeys = await page.evaluate(() => {
-            const iframeKeys = Object.keys(window);
-            // 粗略过滤掉常见的内置对象
-            return iframeKeys.filter(k => !/^(webkit|on|DOM|CSS|HTML|crypto|chrome|speech)/.test(k));
-        });
-        // console.log('[Debug] 当前 window 上存在的非标准全局变量有:', globalKeys);
-
-        // 取消单纯的等待死停顿，马上开始执行测试逻辑（测试逻辑里面包含了轮询等待）
         await runCameraTests();
-
     } catch (err) {
         console.error('[Critical] Setup failed:', err);
         cleanupAndExit(1);
@@ -128,101 +136,101 @@ bot.once('spawn', async () => {
 // ============================================================
 
 async function runCameraTests() {
-        /*
-    console.log('\n=== 开始相机系统测试 ===\n');
+    /*
+console.log('\n=== 开始相机系统测试 ===\n');
 
-    // --- 测试 1: 修改 FOV (广角) ---
-    console.log(`[Test 1] 尝试修改 FOV 至 ${TARGET_FOV}...（等待前端 Viewer 加载）`);
+// // --- 测试 1: 修改 FOV (广角) ---
+// console.log(`[Test 1] 尝试修改 FOV 至 ${TARGET_FOV}...（等待前端 Viewer 加载）`);
 
-    try {
-        // 使用前端轮询，最长等待 10 秒，直到 window.viewer 出现
-        const currentFov = await page.evaluate((targetFov) => {
-            return new Promise((resolve) => {
-                let attempts = 0;
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    // 定期检查全局对象是否已经挂载完成
-                    if (window.viewer && window.viewer.camera) {
-                        clearInterval(checkInterval);
-                        const oldFov = window.viewer.camera.fov;
-                        window.viewer.camera.fov = targetFov;
-                        window.viewer.camera.updateProjectionMatrix(); // 必须更新矩阵才生效
-                        resolve({ success: true, old: oldFov, new: window.viewer.camera.fov });
-                    } else if (attempts > 50) {
-                        // 50次 * 200毫秒 = 10秒超时
-                        clearInterval(checkInterval);
-                        resolve({ success: false, error: '等待 10 秒仍未找到 window.viewer，前端加载过慢或失败。' });
-                    }
-                }, 200); // 每 200ms 检测一次
-            });
-        }, TARGET_FOV);
+// try {
+//     // 使用前端轮询，最长等待 10 秒，直到 window.viewer 出现
+//     const currentFov = await page.evaluate((targetFov) => {
+//         return new Promise((resolve) => {
+//             let attempts = 0;
+//             const checkInterval = setInterval(() => {
+//                 attempts++;
+//                 // 定期检查全局对象是否已经挂载完成
+//                 if (window.viewer && window.viewer.camera) {
+//                     clearInterval(checkInterval);
+//                     const oldFov = window.viewer.camera.fov;
+//                     window.viewer.camera.fov = targetFov;
+//                     window.viewer.camera.updateProjectionMatrix(); // 必须更新矩阵才生效
+//                     resolve({ success: true, old: oldFov, new: window.viewer.camera.fov });
+//                 } else if (attempts > 50) {
+//                     // 50次 * 200毫秒 = 10秒超时
+//                     clearInterval(checkInterval);
+//                     resolve({ success: false, error: '等待 10 秒仍未找到 window.viewer，前端加载过慢或失败。' });
+//                 }
+//             }, 200); // 每 200ms 检测一次
+//         });
+//     }, TARGET_FOV);
 
-        if (currentFov.success) {
-            console.log(`[Success] 前端加载完成，FOV 已成功修改: ${currentFov.old} -> ${currentFov.new}`);
-        } else {
-            console.warn(`[Warn] 自动修改 FOV 失败: ${currentFov.error}`);
-        }
+//     if (currentFov.success) {
+//         console.log(`[Success] 前端加载完成，FOV 已成功修改: ${currentFov.old} -> ${currentFov.new}`);
+//     } else {
+//         console.warn(`[Warn] 自动修改 FOV 失败: ${currentFov.error}`);
+//     }
 
-    } catch (e) {
-        console.error('[Error] FOV Modification failed:', e);
+// } catch (e) {
+//     console.error('[Error] FOV Modification failed:', e);
+// }
+
+// --- 测试 2: 键盘旋转视野 ---
+console.log('\n[Test 2] 启动键盘旋转监听...');
+console.log('请点击弹出的浏览器窗口，然后使用方向键控制视角:');
+console.log('  ↑ : 抬头');
+console.log('  ↓ : 低头');
+console.log('  ← : 左转');
+console.log('  → : 右转');
+console.log('  R : 重置视角');
+console.log('  Q : 退出测试\n');
+
+await page.exposeFunction('reportRotation', ({ yaw, pitch, reset }) => {
+    if (reset) {
+        bot.look(0, 0, true);
+        console.log('[Action] 视角已重置');
+        return;
     }
 
-    // --- 测试 2: 键盘旋转视野 ---
-    console.log('\n[Test 2] 启动键盘旋转监听...');
-    console.log('请点击弹出的浏览器窗口，然后使用方向键控制视角:');
-    console.log('  ↑ : 抬头');
-    console.log('  ↓ : 低头');
-    console.log('  ← : 左转');
-    console.log('  → : 右转');
-    console.log('  R : 重置视角');
-    console.log('  Q : 退出测试\n');
+    const currentYaw = bot.entity.yaw;
+    const currentPitch = bot.entity.pitch;
 
-    await page.exposeFunction('reportRotation', ({ yaw, pitch, reset }) => {
-        if (reset) {
-            bot.look(0, 0, true);
-            console.log('[Action] 视角已重置');
-            return;
+    const newYaw = currentYaw + (yaw * Math.PI / 180);
+    const newPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, currentPitch + (pitch * Math.PI / 180)));
+
+    bot.look(newYaw, newPitch, true);
+    console.log(`[Action] 旋转视角: 偏航 ${yaw}°, 俯仰 ${pitch}° | 当前 Yaw: ${newYaw.toFixed(2)}, Pitch: ${newPitch.toFixed(2)}`);
+});
+
+// 浏览器端按键监听
+await page.evaluate(() => {
+    document.addEventListener('keydown', (e) => {
+        let yawChange = 0;
+        let pitchChange = 0;
+        let reset = false;
+
+        switch (e.key) {
+            // 原本是 -15，根据你的要求翻转正负。
+            case 'ArrowUp': pitchChange = 15; break;
+            case 'ArrowDown': pitchChange = -15; break;
+
+            case 'ArrowLeft': yawChange = 15; break;
+            case 'ArrowRight': yawChange = -15; break;
+            case 'r': case 'R': reset = true; break;
+            case 'q': case 'Q':
+                window.testQuit = true;
+                return;
         }
 
-        const currentYaw = bot.entity.yaw;
-        const currentPitch = bot.entity.pitch;
-
-        const newYaw = currentYaw + (yaw * Math.PI / 180);
-        const newPitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, currentPitch + (pitch * Math.PI / 180)));
-
-        bot.look(newYaw, newPitch, true);
-        console.log(`[Action] 旋转视角: 偏航 ${yaw}°, 俯仰 ${pitch}° | 当前 Yaw: ${newYaw.toFixed(2)}, Pitch: ${newPitch.toFixed(2)}`);
-    });
-
-    // 浏览器端按键监听
-    await page.evaluate(() => {
-        document.addEventListener('keydown', (e) => {
-            let yawChange = 0;
-            let pitchChange = 0;
-            let reset = false;
-
-            switch (e.key) {
-                // 原本是 -15，根据你的要求翻转正负。
-                case 'ArrowUp': pitchChange = 15; break;
-                case 'ArrowDown': pitchChange = -15; break;
-
-                case 'ArrowLeft': yawChange = 15; break;
-                case 'ArrowRight': yawChange = -15; break;
-                case 'r': case 'R': reset = true; break;
-                case 'q': case 'Q':
-                    window.testQuit = true;
-                    return;
+        if (reset || yawChange !== 0 || pitchChange !== 0) {
+            if (window.reportRotation) {
+                window.reportRotation({ yaw: yawChange, pitch: pitchChange, reset: reset });
             }
-
-            if (reset || yawChange !== 0 || pitchChange !== 0) {
-                if (window.reportRotation) {
-                    window.reportRotation({ yaw: yawChange, pitch: pitchChange, reset: reset });
-                }
-            }
-        });
+        }
     });
+});
 
-    console.log('=== 测试环境就绪，正在运行... ===\n');*/
+console.log('=== 测试环境就绪，正在运行... ===\n');*/
 
     const checkInterval = setInterval(async () => {
         console.log('checking');
