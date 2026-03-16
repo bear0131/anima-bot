@@ -19,8 +19,7 @@ class MemoryNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     content: str        # 提炼后的事实/知识，例如 "Steve likes apples."
     importance: float   # 有效程度/重要性 (0-100)
-    created_at: float = Field(default_factory=lambda: datetime.now().timestamp())
-    last_updated: float = Field(default_factory=lambda: datetime.now().timestamp())
+    time: int = -1
     
     # 辅助字段，用于你的 f 函数计算
     decay_factor: float = 1.0  # 衰减因子

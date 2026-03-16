@@ -19,6 +19,8 @@ class ChatMemory:
         self.state = agent_state
         self.llm_client = llm_client # 需要传入 LLM 客户端用于重构记忆
         self.model_name = model_name
+        self.initial_time = int(datetime.now().timestamp())
+        self.running_time = 0
 
         self.memory_dir = os.path.join('memory', world_name)
         self.memory_file = os.path.join(self.memory_dir, 'memory_chat.json')
@@ -59,9 +61,6 @@ class ChatMemory:
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
         _event = copy.copy(event)
-        # 1. 过滤：code_run_request 包含大量代码，且通常紧接着 code_run_result，可以不记
-        if _event.type == "code_run_request":
-            return
         _event.content = _event.content + '\n' + self.state.render_state()
         # 2. 加入 Level 1 (供 ChatContext 实时使用)
         self.level1_events.append(_event)
@@ -82,17 +81,32 @@ class ChatMemory:
         try:
             with open(self.memory_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                self.level2_nodes = [MemoryNode(**node_data) for node_data in data]
+
+                # 检查是否是新的字典格式
+                if isinstance(data, dict) and 'running_time' in data and 'nodes' in data:
+                    self.running_time = data['running_time']
+                    nodes_data = data['nodes']
+                    print(f"[Memory] Loaded running_time: {self.running_time}")
+                else:
+                    # 兼容旧的列表格式
+                    print("[Memory][WARNING] Invalid memory format (expected dict with 'running_time' and 'nodes').")
+                    nodes_data = []
+                
+                self.level2_nodes = [MemoryNode(**node_data) for node_data in nodes_data]
                 print(f"🧠 Loaded {len(self.level2_nodes)} memories from {self.memory_file}")
         except (json.JSONDecodeError, TypeError) as e:
-            print(f"❌ Error loading memory file: {e}. Starting with a fresh memory.")
+            print(f"[Memory][ERROR] Error loading memory file: {e}. Starting with a fresh memory.")
             self.level2_nodes = []
 
     def _save_memory(self):
         """将当前 Level 2 记忆保存到文件。"""
         try:
-            # 将 MemoryNode 对象列表转换为可序列化的字典列表
-            data_to_save = [node.model_dump() for node in self.level2_nodes]
+            
+            data_to_save = {
+                'running_time': self.running_time,
+                'nodes': [node.model_dump() for node in self.level2_nodes]
+            }
+
             with open(self.memory_file, 'w', encoding='utf-8') as f:
                 json.dump(data_to_save, f, ensure_ascii=False, indent=4)
         except Exception as e:
@@ -109,14 +123,15 @@ class ChatMemory:
             
             # 1. 准备输入数据
             current_memories = [
-                {"id": n.id, "content": n.content, "importance": n.importance} 
+                {"id": n.id, "content": n.content, "importance": n.importance, "time": n.time} 
                 for n in self.level2_nodes
             ]
             
             new_events_text = ""
             for e in self.consolidation_buffer:
                 sender = e.metadata.get('user', e.source)
-                new_events_text += f"[{e.type}] {sender}: {e.content}\n"
+                event_time = int(e.timestamp.timestamp()) - self.initial_time + self.running_time
+                new_events_text += f"[{e.type}] {sender}: {e.content} at time {event_time}\n"
 
             # 2. 清空缓冲区
             self.consolidation_buffer.clear()
@@ -125,24 +140,28 @@ class ChatMemory:
             
             # A. 系统指令 (System Prompt) - 只有指令和格式
             system_instruction = """
-            You are the objective memory archivist for a Minecraft Bot.
+            You are the objective memory archivist for a Minecraft Bot. Your task is to consolidate existing memories with new events into a revised, clean list of memories.
+
+            ### INPUT DATA:
+            - **Current Knowledge Base**: A list of existing memories, each with `content`, `importance`, and a relative `time` in seconds since the session started.
+            - **Recent Events**: A log of new events, each with its own relative `time`.
             
             ### CORE OBJECTIVES:
             1. **CHAT**: Retain key user instructions and conversation context.
             2. **NON-CHAT** (Actions/Logs): Record ONLY factual states with future utility. 
                - **NO EVALUATIONS**: DO NOT use subjective adjectives (e.g., "excellent", "failed", "smart", "good"). DO NOT interpret capabilities (e.g., never write "Bot showed replaceability"). 
                - **FACTS ONLY**: Write exactly what happened (e.g., "Crafted a diamond sword", "Found a village at 100,200", "Died by Zombie").
-            3. **MERGE**: Aggressively collapse repetitive events into a single entry. 
-               - Bad: [Node 1: Mined iron, Node 2: Mined iron]
-               - Good: [Node 1: Mined iron deposits]
+            3. **MERGE & UPDATE**: Aggressively collapse related events. If a new event updates an old memory, merge them and use the LATEST `time` from the involved events/memories.
+               - Example: Old memory `{"content": "Mined 10 iron ore", "time": 300}` and new event `Mined 5 iron ore at time 350` should merge into `{"content": "Mined 15 iron ore", "time": 350}`.
             4. **PRUNE**: Discard routine navigation logs or temporary errors unless they indicate a permanent blocker.
 
             ### FORMAT RULES:
             - **Style**: Use concise, telegraphic English (Subject-Verb-Object).
             - **Output**: Return strictly valid JSON with no markdown formatting.
-            - **Structure**: {"memories": [{"content": "string", "importance": 0-100}]}
+            - **Structure**: Your output MUST be a JSON object with a single key "memories". The value must be a list of memory objects.
+            - **Memory Object**: Each memory object in the list must contain three keys: `{"content": "string", "importance": 0-100, "time": "int"}`. The `time` must be an integer.
             """
-
+            
             # B. 用户数据 (User Prompt) - 只有数据
             user_data = f"""
             ### Current Knowledge Base (Level 2 Memory):
@@ -201,7 +220,6 @@ class ChatMemory:
                 # --- 修改结束 ---
 
                 new_nodes = []
-                current_time = datetime.now().timestamp()
 
                 for item in raw_list:
                     # 有时候 LLM 可能会生成字符串而不是对象，做个防御
@@ -209,6 +227,7 @@ class ChatMemory:
                         continue
                         
                     text = item.get("content")
+                    time = item.get("time", int(datetime.now().timestamp()) - self.initial_time)
                     score = float(item.get("importance", 50))
                     
                     if score < self.min_importance:
@@ -217,7 +236,7 @@ class ChatMemory:
                     node = MemoryNode(
                         content=text,
                         importance=score,
-                        last_updated=current_time
+                        time=time
                     )
                     new_nodes.append(node)
 
@@ -240,7 +259,7 @@ class ChatMemory:
             sorted_nodes = sorted(self.level2_nodes, key=lambda x: x.importance, reverse=True)
             memory_text = "### 🧠 Long-term Knowledge (Summarized)\n"
             for node in sorted_nodes:
-                memory_text += f"- {node.content} (Imp: {node.importance})\n"
+                memory_text += f"- {node.content} (Imp: {node.importance}, Time: {node.time})\n"
             # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
             messages.append({"role": "user", "content": memory_text})
 
@@ -445,7 +464,6 @@ class CodeMemory:
                     raw_list = []
 
                 new_nodes = []
-                current_time = datetime.now().timestamp()
 
                 for item in raw_list:
                     if not isinstance(item, dict):
@@ -465,8 +483,7 @@ class CodeMemory:
 
                     node = MemoryNode(
                         content=text,
-                        importance=score,
-                        last_updated=current_time
+                        importance=score
                     )
                     new_nodes.append(node)
 
