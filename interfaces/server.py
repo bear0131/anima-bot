@@ -156,7 +156,7 @@ async def get_agent_status():
         "connected": js_connection_status["connected"],
         "status": state.status if state else "IDLE",
         "mc_state": state.mc_state if state else None,
-        "last_screenshot": state.last_screenshot if state else None,
+        "last_screenshot": state.last_screenshot_front if state else None,
     }
 
 
@@ -166,7 +166,7 @@ async def get_screenshot():
     state = get_agent_state()
     if state is None:
         return JSONResponse({"error": "Agent not initialized"}, status_code=503)
-    return {"screenshot": state.last_screenshot}
+    return {"screenshot": state.last_screenshot_front}
 
 
 @app.post("/api/command")

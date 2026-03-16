@@ -377,8 +377,8 @@ function updateEnvironment(data) {
 // 更新截图
 async function updateScreenshot(data) {
     const img = document.getElementById('screenshot');
-    if (data.last_screenshot) {
-        img.src = `data:image/png;base64,${data.last_screenshot}`;
+    if (data.last_screenshot_front) {
+        img.src = `data:image/png;base64,${data.last_screenshot_front}`;
     }
 }
 

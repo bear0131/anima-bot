@@ -318,6 +318,20 @@ bot.once('spawn', async () => {
             await page_front.goto('http://localhost:3007');
             await page_back.goto('http://localhost:3008');
 
+            
+            page_front.on('console', msg => {
+                if (msg.type() === 'error') {
+                    console.error('[Front Browser ERROR]:', msg.text());
+                }
+            });
+
+            // 只保留 Back 浏览器的错误信息
+            page_back.on('console', msg => {
+                if (msg.type() === 'error') {
+                    console.error('[Back Browser ERROR]:', msg.text());
+                }
+            });
+
             // 等待页面加载
             await new Promise(r => setTimeout(r, 2000));
 
