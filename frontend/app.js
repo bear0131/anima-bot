@@ -374,12 +374,43 @@ function updateEnvironment(data) {
     }
 }
 
-// 更新截图
-async function updateScreenshot(data) {
-    const img = document.getElementById('screenshot');
-    if (data.last_screenshot_front) {
-        img.src = `data:image/png;base64,${data.last_screenshot_front}`;
+function buildImageSrc(imageData) {
+    if (!imageData || typeof imageData !== 'string') {
+        return null;
     }
+
+    // 已是完整 data URL，直接使用
+    if (imageData.startsWith('data:image/')) {
+        return imageData;
+    }
+
+    // Mineflayer 当前截图为 jpeg
+    return `data:image/jpeg;base64,${imageData}`;
+}
+
+function setImageIfPresent(imgElement, imageData) {
+    if (!imgElement) {
+        return;
+    }
+
+    const src = buildImageSrc(imageData);
+    if (src) {
+        imgElement.src = src;
+    } else {
+        imgElement.removeAttribute('src');
+    }
+}
+
+// 更新截图
+function updateScreenshot(data) {
+    const frontImg = document.getElementById('screenshot-front');
+    const backImg = document.getElementById('screenshot-back');
+
+    const frontScreenshot = data.last_screenshot_front;
+    const backScreenshot = data.last_screenshot_back;
+
+    setImageIfPresent(frontImg, frontScreenshot);
+    setImageIfPresent(backImg, backScreenshot);
 }
 
 // 发送聊天消息

@@ -152,8 +152,27 @@ header h1 {
 }
 
 /* Screenshot */
-.screenshot-container {
+.screenshots-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
     margin-top: 10px;
+}
+
+.screenshot-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.screenshot-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.screenshot-container {
     border-radius: 8px;
     overflow: hidden;
     background: #000;
@@ -567,6 +586,10 @@ textarea {
     }
 
     .main-content {
+        grid-template-columns: 1fr;
+    }
+
+    .screenshots-grid {
         grid-template-columns: 1fr;
     }
 
