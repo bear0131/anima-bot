@@ -99,7 +99,9 @@ class Agent:
             
             elif event.type == 'screenshot':
                 self.agent_state.timestamp_screenshot = event.timestamp
-                self.agent_state.last_screenshot_front = event.content["front"]
+                # observer 主视角在线时，front 由 /ws/vision 更新，不再被 mineflayer 覆盖
+                if not server.is_observer_front_active():
+                    self.agent_state.last_screenshot_front = event.content["front"]
                 self.agent_state.last_screenshot_back = event.content["back"]
 
             elif event.type == 'observation':

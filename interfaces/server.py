@@ -49,6 +49,15 @@ active_socket: WebSocket = None
 # JS 连接状态
 js_connection_status = {"connected": False, "last_connected": None}
 
+# Observer Vision 连接状态
+vision_connection_status = {
+    "connected": False,
+    "last_connected": None,
+    "last_frame": None,
+    "state": None,
+    "camera_bound": None,
+}
+
 # Agent 状态引用（由 core.py 设置）
 _global_agent_state = None
 
@@ -65,6 +74,22 @@ def get_agent_state():
 def set_queue(queue: asyncio.Queue):
     global global_event_queue
     global_event_queue = queue
+
+
+def is_observer_front_active(max_stale_seconds: float = 3.0) -> bool:
+    """判断 observer 主视角是否活跃（用于 front 截图优先级）"""
+    if not vision_connection_status["connected"]:
+        return False
+
+    last_frame_iso = vision_connection_status.get("last_frame")
+    if not last_frame_iso:
+        return False
+
+    try:
+        delta = datetime.now() - datetime.fromisoformat(last_frame_iso)
+        return delta.total_seconds() <= max_stale_seconds
+    except Exception:
+        return False
 
 async def send_packet(data: dict):
     """供 Core 调用的发送函数"""
@@ -99,6 +124,47 @@ async def websocket_endpoint(websocket: WebSocket):
         print("[Server] Node.js disconnected.")
         active_socket = None
         js_connection_status["connected"] = False
+
+
+@app.get("/ws/vision/status")
+async def vision_status():
+    """Observer vision 连接状态"""
+    return vision_connection_status
+
+
+@app.websocket("/ws/vision")
+async def vision_websocket_endpoint(websocket: WebSocket):
+    """接收 observer-client 的主视角流并写入 agent_state.last_screenshot_front"""
+    await websocket.accept()
+    vision_connection_status["connected"] = True
+    vision_connection_status["last_connected"] = datetime.now().isoformat()
+    print("[Server] Observer vision connected.")
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            packet_type = data.get("type")
+            content = data.get("content") or {}
+
+            if packet_type == "vision_status":
+                vision_connection_status["state"] = content.get("state")
+                vision_connection_status["camera_bound"] = content.get("camera_bound")
+
+            elif packet_type == "vision_frame":
+                jpeg_base64 = content.get("jpeg_base64")
+                if jpeg_base64:
+                    state = get_agent_state()
+                    if state is not None:
+                        state.last_screenshot_front = jpeg_base64
+                        state.timestamp_screenshot = datetime.now()
+
+                vision_connection_status["last_frame"] = datetime.now().isoformat()
+
+    except WebSocketDisconnect:
+        print("[Server] Observer vision disconnected.")
+        vision_connection_status["connected"] = False
+        vision_connection_status["state"] = None
+        vision_connection_status["camera_bound"] = None
 
 
 @app.websocket("/ws/logs")
@@ -154,6 +220,7 @@ async def get_agent_status():
     return {
         "initialized": state is not None,
         "connected": js_connection_status["connected"],
+        "vision_connected": vision_connection_status["connected"],
         "status": state.status if state else "IDLE",
         "mc_state": state.mc_state if state else None,
         "last_screenshot_front": state.last_screenshot_front if state else None,
