@@ -21,7 +21,7 @@ const { Vec3 } = require("vec3");
 yaw：0为北(Z-)，1.57为西(X-)，3.14为南(Z+)，4.71为东(X+).
 pitch：1.57为正上方，-1.57为正下方。
 **THIS IS IMPORTANT:**在代码中不允许出现超过一个 bot.look。
-移动：移动只能通过转动视角+bot.setControlState(control, state)+bot.clearControlStates()（控制项：forward、back、left、right、jump）实现。
+移动：移动只能通过转动视角+bot.setControlState(control, state)+bot.clearControlStates()（控制项：forward、back、left、right、jump）实现。如果你需要跳起来并在脚底下放置方块，你可以直接调用 scaffold(bot,name)，它会帮你完成这个动作。
 游泳：在水中时，bot.setControlState("jump", true) 可以让你浮起来，bot.setControlState("forward", true) 可以让你向前游。
     **重要**：在水中时，如果不持续设置 "jump" 状态，可能会慢慢沉下去，所以在水中时要在代码最结尾写 bot.setControlState("jump", true)。同时如果想要持续移动，也可以在结尾写 bot.setControlState("forward", true).
 挖掘：await digBlock(bot, position)（必须先靠近目标）

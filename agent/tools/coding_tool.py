@@ -177,8 +177,8 @@ class CodingTool:
                     messages=messages,
                     response_format={"type": "json_object"},
                     temperature=0.0,
-                    #timeout=10.0,
-                    #reasoning_effort="low",
+                    timeout=10.0,
+                    reasoning_effort="low",
                 )
                 print("token: ", response.usage.total_tokens)
                 break

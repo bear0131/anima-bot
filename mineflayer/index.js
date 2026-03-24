@@ -368,6 +368,7 @@ bot.once('spawn', async () => {
         let snapshotPromise = Promise.resolve();
 
         // 如果可以截图，则执行截图操作
+        /*
         if (enablePrismarineViewer && ws.readyState == WebSocket.OPEN && !isSnapshotting && page_front && page_back) {
             isSnapshotting = true;
 
@@ -394,6 +395,7 @@ bot.once('spawn', async () => {
                 isSnapshotting = false;
             });
         }
+            */
         // 发送文字状态信息
         snapshotPromise.then(() => {
             try {

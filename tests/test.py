@@ -9,7 +9,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="google/gemini-3.1-pro-preview",
+    model="gemini-3-flash-preview",
     messages=[
         {   "role": "system",
             "content": "You are a helpful assistant."
