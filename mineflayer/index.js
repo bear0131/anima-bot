@@ -1,9 +1,6 @@
 require('dotenv').config();
 const mineflayer = require('mineflayer');
 const WebSocket = require('ws');
-const { mineflayer: mineflayerViewer } =
-  require('./prismarine-viewer')
-const puppeteer = require('puppeteer')
 
 // ============================================================
 //  全局错误处理 - 防止静默崩溃
@@ -186,11 +183,6 @@ function parseArgs() {
     return parsed;
 }
 
-const argv = parseArgs();
-// headless 参数：默认为 true，如果传入 --headless=false 则设为 false
-const headlessMode = argv.headless !== 'false';
-// prismarine_viewer 参数：默认为 true，如果传入 --prismarine_viewer=false 则设为 false
-const enablePrismarineViewer = argv.prismarine_viewer !== 'false';
 
 // --- 依赖引入 ---
 // 这里的 require 只是为了让 node 知道我们要用这些包
@@ -222,8 +214,6 @@ const bot = mineflayer.createBot({
     username: process.env.BOT_USERNAME || 'animabot',
     version: '1.18.2'
 });
-VIEWER_PORT = 3007;
-BACKVIEW_VIEWER_PORT = 3008;
 
 bot.loadPlugin(pathfinder);
 bot.loadPlugin(tool);
@@ -241,8 +231,6 @@ globalWs = ws;
 startMemoryMonitoring();
 
 let browser = null
-let page_front = null
-let page_back = null
 
 ws.on('open', () => {
     console.log('Connected to Brain!');
@@ -250,98 +238,6 @@ ws.on('open', () => {
 
 bot.once('spawn', async () => {
     console.log('Bot Spawned.');
-
-    if (enablePrismarineViewer) {
-        // 启动 Viewer (Web服务器)
-        mineflayerViewer(bot, {
-            port: VIEWER_PORT,
-            firstPerson: true,
-            viewDistance: 6,
-            backview: false
-        });
-        console.log(`Viewer started on port ${VIEWER_PORT}`);
-        mineflayerViewer(bot, {
-            port: BACKVIEW_VIEWER_PORT,
-            firstPerson: true,
-            viewDistance: 6,
-            backview: true
-        });
-        console.log(`Backview Viewer started on port ${BACKVIEW_VIEWER_PORT}`);
-
-        try {
-            // 3. 启动 Puppeteer
-            browser = await puppeteer.launch({ headless: headlessMode }); // headless 表示不显示浏览器界面，调试可以设为 false
-            page_front = await browser.newPage();
-            page_back = await browser.newPage();
-
-            // 设置视口大小
-            await page_front.setViewport({ width: 480, height: 270 });
-            await page_back.setViewport({ width: 480, height: 270 });
-
-            // 在 navigation (page.goto) 之前插入
-            /*
-            await page.setRequestInterception(true);
-
-            page.on('request', async (request) => {
-                console.error('request come');
-                const url = request.url();
-                // 拦截我们本地 viewer 服务的所有 js 文件
-                if (url.endsWith('.js') && url.includes(`localhost:${VIEWER_PORT}`) && 0) {
-                    try {
-                        // 在 Node.js 端用 fetch 把真实代码拉下来
-                        const response = await fetch(url);
-                        let body = await response.text();
-
-                        // WebGL (Three.js) 这里一般会硬编码 PerspectiveCamera 默认视角为 75。
-                        // 无论它被混淆成了什么名字，创建相机的参数逻辑肯定类似于:
-                        // new n.PerspectiveCamera(75, window.innerWidth ... )
-                        // 我们用正则表达式直接把这个默认值改成你的目标 FOV（120）。
-                        body = body.replace(/PerspectiveCamera\(\s*75/g, `PerspectiveCamera(120`);
-
-                        // 将篡改后的代码返回给无头浏览器
-                        await request.respond({
-                            status: 200,
-                            contentType: 'application/javascript',
-                            body: body
-                        });
-                    } catch (err) {
-                        console.error('拦截替换 JS 失败:', err);
-                        request.continue();
-                    }
-                } else {
-                    // 其他请求（如 html、图片等）正常放行
-                    request.continue();
-                }
-            });
-            */
-            // 访问 Viewer 页面
-            await page_front.goto('http://localhost:3007');
-            await page_back.goto('http://localhost:3008');
-
-            
-            page_front.on('console', msg => {
-                if (msg.type() === 'error') {
-                    console.error('[Front Browser ERROR]:', msg.text());
-                }
-            });
-
-            // 只保留 Back 浏览器的错误信息
-            page_back.on('console', msg => {
-                if (msg.type() === 'error') {
-                    console.error('[Back Browser ERROR]:', msg.text());
-                }
-            });
-
-            // 等待页面加载
-            await new Promise(r => setTimeout(r, 2000));
-
-            console.log('Ready to take screenshots!');
-        } catch (err) {
-            console.error('Failed to start screenshot server.', err);
-        }
-    } else {
-        console.log('Prismarine viewer disabled');
-    }
 
     const mcData = require("minecraft-data")(bot.version);
     const movements = new Movements(bot, mcData);
@@ -367,35 +263,6 @@ bot.once('spawn', async () => {
     setInterval(async () => {
         let snapshotPromise = Promise.resolve();
 
-        // 如果可以截图，则执行截图操作
-        /*
-        if (enablePrismarineViewer && ws.readyState == WebSocket.OPEN && !isSnapshotting && page_front && page_back) {
-            isSnapshotting = true;
-
-            // 使用 Promise.all 同时截取两张图
-            snapshotPromise = Promise.all([
-                page_front.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 }),
-                page_back.screenshot({ encoding: 'base64', type: 'jpeg', quality: 50 })
-            ])
-            .then(([frontBase64, backBase64]) => {
-                // 将两张图的数据放入 content 对象中发送
-                ws.send(JSON.stringify({
-                    source: 'minecraft',
-                    type: 'screenshot',
-                    content: {
-                        front: frontBase64,
-                        back: backBase64
-                    },
-                    timestamp: Date.now(),
-                    metadata: { user: 'system' }
-                }));
-            })
-            .catch(e => console.error('Snapshot error:', e))
-            .finally(() => {
-                isSnapshotting = false;
-            });
-        }
-            */
         // 发送文字状态信息
         snapshotPromise.then(() => {
             try {

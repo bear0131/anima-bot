@@ -1,7 +1,3 @@
-[submodule "mineflayer/prismarine-viewer"]
-	path = mineflayer/prismarine-viewer
-	url = https://github.com/Tony2-github/anima-prismarine-viewer.git
-	branch = custom-viewer
 [submodule "observer-client"]
 	path = observer-client
 	url = https://github.com/SampsonYW/observer-client.git
