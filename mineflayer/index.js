@@ -406,7 +406,7 @@ ws.on('message', async (data) => {
 
                     // 4. 如果代码在 60 秒内顺利执行完了，拆除定时炸弹
                     clearTimeout(timeoutTimer);
-                    resolve("代码执行成功");
+                    resolve("代码执行完成");
 
                 } catch (err) {
                     // 如果代码执行过程中自己报错了（比如语法错误），也拆除炸弹并抛出

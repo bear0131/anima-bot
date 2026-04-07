@@ -115,10 +115,10 @@ class Agent:
                         result_desc += f"\n错误详情:\n{incoming_event.content}"
                     logger.error(f"❌ 代码执行失败: {incoming_event.error}")
                 else:
-                    result_desc = f"代码执行成功!"
+                    result_desc = f"代码执行完成!"
                     if incoming_event.content:
                         result_desc += f"\n返回结果:\n{incoming_event.content}"
-                    logger.info("✅ 代码执行成功")
+                    logger.info("✅ 代码执行完成")
                 
                 event.content = result_desc
 
