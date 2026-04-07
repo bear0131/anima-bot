@@ -3,20 +3,27 @@ async function placeItem(bot, name, position) {
     if (typeof name !== "string") {
         throw new Error(`name for placeItem must be a string`);
     }
-    // return if position is not Vec3
-    //if (!(position instanceof Vec3)) {
-    //    throw new Error(`position for placeItem must be a Vec3`);
-    //}
+
     const itemByName = mcData.itemsByName[name];
     if (!itemByName) {
         throw new Error(`No item named ${name}`);
     }
+
+    // --- 新增判定：检查目标位置是否已经是方块 ---
+    const targetBlock = bot.blockAt(position);
+    if (targetBlock && targetBlock.name !== "air") {
+        report(`无法放置 ${name}：位置 ${position} 已经有方块了，类型是 ${targetBlock.name}`);
+        return;
+    }
+    // ---------------------------------------
+
     const item = bot.inventory.findInventoryItem(itemByName.id);
     if (!item) {
         report(`No ${name} in inventory`);
         return;
     }
     const item_count = item.count;
+
     // find a reference block
     const faceVectors = [
         new Vec3(0, 1, 0),
@@ -36,26 +43,15 @@ async function placeItem(bot, name, position) {
             break;
         }
     }
+
     if (!referenceBlock) {
         report(
             `No block to place ${name} on. You cannot place a floating block.`
         );
-        /*
-        _placeItemFailCount++;
-        if (_placeItemFailCount > 10) {
-            throw new Error(
-                `placeItem failed too many times. You cannot place a floating block.`
-            );
-        }
-        */
         return;
     }
 
-    // You must use try catch to placeBlock
     try {
-        // You must first go to the block position you want to place
-        //await bot.pathfinder.goto(new GoalPlaceBlock(position, bot.world, {}));
-        // You must equip the item right before calling placeBlock
         await bot.equip(item, "hand");
         await bot.placeBlock(referenceBlock, faceVector);
         report(`Placed ${name}`);
@@ -66,14 +62,6 @@ async function placeItem(bot, name, position) {
             report(
                 `Error placing ${name}: ${err.message}, please find another position to place`
             );
-            /*
-            _placeItemFailCount++;
-            if (_placeItemFailCount > 10) {
-                throw new Error(
-                    `placeItem failed too many times, please find another position to place.`
-                );
-            }
-            */
         } else {
             report(`Placed ${name}`);
             bot.save(`${name}_placed`);

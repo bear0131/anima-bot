@@ -207,6 +207,7 @@ class MainAgent:
                     try:
                         arguments = json.loads(tool_call.function.arguments)
                         task_description = arguments.get("task", "")
+                        model_name = arguments.get("model_name", "")
                     except:
                         # 如果解析失败，尝试从 last_event 获取
                         task_description = last_event.content if last_event else ""
@@ -216,7 +217,10 @@ class MainAgent:
 
                     coding_event = Event(
                         type="tool_call",
-                        content=task_description,
+                        content={
+                            "task_description": task_description,
+                            "model_name": model_name
+                        },
                         source="bot"
                         )
                     
@@ -242,9 +246,13 @@ class MainAgent:
                             "task": {
                                 "type": "string",
                                 "description": "需要执行的任务描述."
+                            },
+                            "model_name": {
+                                "type": "string",
+                                "description": "使用的模型名称，可选 google/gemini-3-flash-preview 或 google/gemini-3.1-pro-preview"
                             }
                         },
-                        "required": ["task"]
+                        "required": ["task", "model_name"]
                     }
                 }
             }

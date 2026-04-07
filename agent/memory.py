@@ -66,8 +66,12 @@ class ChatMemory:
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
         _event = copy.copy(event)
-        if _event.type != "task_done":
+        if type(_event.content) == dict:
+            _event.content["state"] = self.state.render_state()
+        elif _event.type != "task_done":
             _event.content = _event.content + '\n' + self.state.render_state()
+
+
         # 2. 加入 Level 1 (供 ChatContext 实时使用)
         self.level1_events.append(_event)
 
@@ -262,7 +266,7 @@ class ChatMemory:
                 messages.append({"role": "user", "content": f"[Chat] {username}: {event.content}"})
                 
             elif event.type == "tool_call":
-                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content["task_description"]}"})
                 
             elif event.type == "task_done":
                 messages.append({"role": "assistant", "content": f"[Mission Log Start ->] {event.content} [<- Mission Log End]"})
@@ -488,7 +492,7 @@ class CodeMemory:
 
         for event in self.level1_events:
             if event.type == "tool_call":
-                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Mission Start] {event.content["task_description"]}"})
 
             elif event.type == "code_run_request":
                 event_list.append(event)

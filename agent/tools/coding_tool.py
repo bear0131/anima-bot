@@ -83,7 +83,7 @@ class CodingTool:
 
         if first_time:
             await self.memory.add_event(Event(
-                source='user',
+                source='assistant',
                 type='tool_call',
                 content=event.content
             ))
@@ -138,8 +138,8 @@ class CodingTool:
         self.task_id += 1
         task_event = event
         task_event.metadata["task_id"] = self.task_id
-        task_event.metadata["main_goal"] = event.content
-
+        task_event.metadata["main_goal"] = event.content["task_description"]
+        self.model_name = event.content["model_name"]
         self.running_time = time.time()
         self.running_count = 0
 
@@ -182,14 +182,24 @@ class CodingTool:
 
         for _ in range(max_retries):
             try:
-                response = await self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                    temperature=0.0,
-                    timeout=10.0,
-                    #reasoning_effort="low",
-                )
+                if self.model_name == "google/gemini-3.1-pro-preview":
+                    response = await self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=messages,
+                        response_format={"type": "json_object"},
+                        temperature=0.0,
+                        #timeout=10.0,
+                        reasoning_effort="low",
+                    )
+                else:
+                    response = await self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=messages,
+                        response_format={"type": "json_object"},
+                        temperature=0.0,
+                        timeout=10.0,
+                        #reasoning_effort="low",
+                    )
                 print("token: ", response.usage.total_tokens)
                 break
             except openai.APIConnectionError as e:
