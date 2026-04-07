@@ -170,6 +170,13 @@ class CodingTool:
         messages.extend(history_messages)
         messages.append({"role": "user", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
 
+        
+        #print(f"coding_tool messages: ")
+        #for mp in history_messages[:-1]:
+        #    print(f"role: {mp["role"]}")
+        #    s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
+        #    print(f"content: {s}")
+
         max_retries = 3
         retry_delay = 5 # 秒
 
@@ -181,7 +188,7 @@ class CodingTool:
                     response_format={"type": "json_object"},
                     temperature=0.0,
                     timeout=10.0,
-                    reasoning_effort="low",
+                    #reasoning_effort="low",
                 )
                 print("token: ", response.usage.total_tokens)
                 break

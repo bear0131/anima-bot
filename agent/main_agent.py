@@ -133,7 +133,7 @@ class MainAgent:
             print(f"role: {mp["role"]}")
             s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
             print(f"content: {s}")
-        print(f"image length: {len(conversation_context[-1])}")
+        print(f"image length: {len(conversation_context[-1]["content"][1]["image_url"]["url"])}")
         for attempt in range(max_retries):
             try:
                 # === 原有的 API 调用代码 ===
@@ -142,6 +142,7 @@ class MainAgent:
                     messages=conversation_context,
                     tools=self._get_tools_definition(),
                     temperature=0.0,
+                    reasoning_effort="low"
                     #max_tokens=10000,
                 )
                 print("token: ", response.usage.total_tokens)

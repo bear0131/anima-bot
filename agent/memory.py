@@ -27,7 +27,7 @@ class ChatMemory:
         os.makedirs(self.memory_dir, exist_ok=True)
 
         prompts_dir = os.getenv("PROMPT_PATH", "agent/prompts")
-        prompt_path = os.path.join(prompts_dir, "code_memory.txt")
+        prompt_path = os.path.join(prompts_dir, "chat_memory.txt")
         with open(prompt_path, "r", encoding="utf-8") as f:
             self.system_instruction = f.read()
 
@@ -109,7 +109,7 @@ class ChatMemory:
         try:
             
             data_to_save = {
-                'running_time': self.running_time,
+                'running_time': self.running_time + int(datetime.now().timestamp()) - self.initial_time,
                 'nodes': [node.model_dump() for node in self.level2_nodes]
             }
 
@@ -381,7 +381,6 @@ class CodeMemory:
                     如果不传，则默认使用全部 level1_events。
         """
         async with self.lock:
-            print("memory refresh begin")
             target_events = list(self.level1_events)
             self.level1_events.clear()
 
@@ -413,6 +412,7 @@ class CodeMemory:
                 if not self.llm_client:
                     print("⚠️ No LLM client provided for memory consolidation.")
                     return
+                print("memory refresh begin")
 
                 response = await self.llm_client.chat.completions.create(
                     model=self.model_name,
@@ -421,6 +421,7 @@ class CodeMemory:
                     ],
                     response_format={"type": "json_object"}
                 )
+                print("memory refresh get response")
 
                 content = response.choices[0].message.content
                 result = json.loads(content)

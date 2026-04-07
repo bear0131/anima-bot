@@ -1,47 +1,71 @@
 /**
- * 让机器人向上跳跃并同时在脚下放置一个方块，实现“搭高高”。
- * @param {import('mineflayer').Bot} bot - The bot instance.
- * @param {string} name - 要放置的方块的名称，例如 'dirt' 或 'cobblestone'。
+ * 判定机器人头顶是否被方块挡住
+ * 考虑到机器人 0.6x0.6 的横截面，检查四个角对应的头顶位置
+ */
+function isHeadBlocked(bot) {
+    const pos = bot.entity.position;
+    // 机器人身高约 1.8，头顶起跳空间在 Y + 2 的位置
+    const headY = Math.floor(pos.y + 2);
+    
+    // 碰撞箱半径为 0.3 (0.6 / 2)
+    const padding = 0.3;
+    const checkPoints = [
+        new Vec3(pos.x + padding, headY, pos.z + padding),
+        new Vec3(pos.x + padding, headY, pos.z - padding),
+        new Vec3(pos.x - padding, headY, pos.z + padding),
+        new Vec3(pos.x - padding, headY, pos.z - padding)
+    ];
+
+    for (const point of checkPoints) {
+        const block = bot.blockAt(point.floored());
+        // 如果方块存在，且不是空气，且具有物理碰撞体积
+        if (block && block.name !== 'air' && block.boundingBox !== 'empty') {
+            return true; // 只要有一个点被挡住，就无法起跳
+        }
+    }
+    return false;
+}
+
+/**
+ * 带有头顶检测的“暴力”搭高
  */
 async function scaffold(bot, name) {
     // 1. 检查数据和物品库
     const itemByName = mcData.itemsByName[name];
-    if (!itemByName) {
-        throw new Error(`[scaffold] No item named ${name}`);
-    }
-
+    if (!itemByName) return;
     const item = bot.inventory.findInventoryItem(itemByName.id);
     if (!item) {
-        bot.chat(`I don't have any ${name} to scaffold with.`);
+        report(`没有 ${name} 可以使用了。`);
         return;
     }
 
-    // 3. 装备手持物品
-    await bot.equip(item, 'hand');
-
-    // 4. 获取用于挂载新方块的“参考方块” (即机器人正脚底垫着的那个方块)
-    const pos = bot.entity.position.floored();
-    const referenceBlock = bot.blockAt(pos.offset(0, -1, 0));
-    
-    if (!referenceBlock || referenceBlock.name === 'air') {
-        throw new Error("No block below to place against.");
+    // 2. 头顶安全检查
+    if (isHeadBlocked(bot)) {
+        report("头顶被挡住了，无法搭高！注意头顶周围四个方块都会挡住");
+        return; 
     }
-    
-    const faceVector = new Vec3(0, 1, 0); // (0, 1, 0) 代表在参考方块的“顶面”进行放置
 
-    // 5. 核心动作开始：起跳！
+    // 3. 准备：装备并看向脚底
+    await bot.equip(item, 'hand');
+    await bot.look(bot.entity.yaw, -Math.PI / 2, true);
+
+    // 4. 【按下阶段】：起跳 + 高频右键
     bot.setControlState('jump', true);
     
-    // 6. 关键点：等待 4 个物理刻 (大约 200 毫秒)。
-    // 此时机器人恰好到达跳跃轨迹的顶点，脚下刚好腾出 > 1.0 的净空。
-    await bot.waitForTicks(4);
-    bot.setControlState('jump', false); // 松开跳跃键
+    const rightClickTimer = setInterval(() => {
+        const pos = bot.entity.position.floored();
+        const referenceBlock = bot.blockAt(pos.offset(0, -1, 0));
+        if (referenceBlock && referenceBlock.name !== 'air') {
+            bot.activateBlock(referenceBlock, new Vec3(0, 1, 0)).catch(() => {});
+        }
+    }, 54);
 
-    // 7. 在最高空执行精准放置
-    try {
-        // placeBlock 会自动瞬间往下看并且发送最精确的数据包
-        await bot.placeBlock(referenceBlock, faceVector);
-    } catch (err) {
-        throw new Error(`Failed to place block: ${err.message}`);
-    }
+    // 5. 【等待阶段】
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    // 6. 【松开阶段】
+    clearInterval(rightClickTimer);
+    bot.setControlState('jump', false);
+    
+    await bot.waitForTicks(1);
 }

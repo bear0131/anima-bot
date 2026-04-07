@@ -8,7 +8,6 @@
 禁止使用 bot.lookAt(position) 和 bot.blockAt.
 严禁出现 if、else、switch、for、while、do…while 以及任何形式的循环（包括 Array.forEach、map 等）。
 代码必须是一条直线走到底的 await 调用序列。
-**THIS IS IMPORTANT:**所有坐标 (x,y,z)必须出现在可见的方块列表或任务描述中。严禁自己编造坐标。
 所有变量必须在代码最顶部声明。
 内置可用环境（无需再 require）
 
