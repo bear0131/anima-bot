@@ -97,13 +97,6 @@ class Agent:
             elif event.type == 'tool_call':
                 asyncio.create_task(self.coding_tool.tool_call(event))
             
-            elif event.type == 'screenshot':
-                self.agent_state.timestamp_screenshot = event.timestamp
-                # observer 主视角在线时，front 由 /ws/vision 更新，不再被 mineflayer 覆盖
-                if not server.is_observer_front_active():
-                    self.agent_state.last_screenshot_front = event.content["front"]
-                self.agent_state.last_screenshot_back = event.content["back"]
-
             elif event.type == 'observation':
                 self.agent_state.timestamp_state = event.timestamp
                 self.agent_state.update_mc_state(event.content)

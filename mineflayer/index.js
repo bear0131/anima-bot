@@ -251,14 +251,16 @@ bot.once('spawn', async () => {
     bot.waitTicks = 20;
     bot.chat("/gamerule keepInventory true");
 
+    const currentPos = bot.entity.position;
+    bot.chat(`/tp animabot ${currentPos.x.toFixed(2)} ${currentPos.y.toFixed(2)} ${currentPos.z.toFixed(2)} 90 0`);
+    await bot.waitForTicks(10);
+    bot.chat(`/tp animabot ${currentPos.x.toFixed(2)} ${currentPos.y.toFixed(2)} ${currentPos.z.toFixed(2)} 0 0`);
+
     // 解锁
     isBotReady = true;
     console.log('>>> Bot is ready for commands! <<<');
 
     // 传当前状态
-
-    // 定义一个标志位，防止上一张图片还没传完下一张就开始，导致堆积
-    let isSnapshotting = false;
 
     setInterval(async () => {
         let snapshotPromise = Promise.resolve();

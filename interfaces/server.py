@@ -223,8 +223,7 @@ async def get_agent_status():
         "vision_connected": vision_connection_status["connected"],
         "status": state.status if state else "IDLE",
         "mc_state": state.mc_state if state else None,
-        "last_screenshot_front": state.last_screenshot_front if state else None,
-        "last_screenshot_back": state.last_screenshot_back if state else None,
+        "last_screenshot_front": state.last_screenshot_front if state else None
     }
 
 
@@ -235,8 +234,7 @@ async def get_screenshot():
     if state is None:
         return JSONResponse({"error": "Agent not initialized"}, status_code=503)
     return {
-        "screenshot_front": state.last_screenshot_front,
-        "screenshot_back": state.last_screenshot_back,
+        "screenshot_front": state.last_screenshot_front
     }
 
 

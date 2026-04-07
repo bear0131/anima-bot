@@ -55,7 +55,7 @@ class CodingTool:
         )
 
         self.running_time = 0
-
+        self.running_count = 0
         self.task_id = 0
 
     def _load_control_primitives(self, primitive_names) -> str:
@@ -75,9 +75,11 @@ class CodingTool:
             task_description = f"总任务: {event.metadata['main_goal']}\n请基于此生成代码，直到完成总任务。"
         else:
             task_description = f"总任务: {event.metadata['main_goal']}\n上次返回的结果: {event.content}\n\n请基于此继续生成代码，直到完成总任务。"
-
+        self.running_count += 1
         if time.time() - self.running_time > 60:
-            task_description += "\n\n⚠️ 注意：距离上次返回已经超过60秒了，如果你在60秒内没有能够完成当前任务，我会告诉你，在下一次返回时视为任务结束，你需要在 `plan` 中总结之前的经验教训，并且 `code` 字段留空 (`\"\"`)。"
+            task_description += "\n\n⚠️ 注意：距离上次返回已经超过60秒了"
+        elif self.running_count > 5:
+            task_description += "\n\n⚠️ 注意：距离上次返回已经轮询5次了"
 
         if first_time:
             await self.memory.add_event(Event(
@@ -91,8 +93,6 @@ class CodingTool:
                 type='code_run_result',
                 content=event.content
             ))
-
-        print(f"event 结果：{event.content}")
 
         if event.metadata["task_id"] != self.task_id:
             logger.warning(f"Received result for task_id {event.metadata['task_id']} but current task_id is {self.task_id}, ignoring...")
@@ -111,10 +111,12 @@ class CodingTool:
         ))
 
         if code == "":
+            return_context = self.memory.render_return_llm_context()
+            return_context.append({"role": "assistant", "content": f"[Mission End] {plan}"})
             asyncio.create_task(self.memory.refresh_memory())
             return_event = Event(
                 type="task_done",
-                content=plan,
+                content=return_context,
                 source="coding_tool"
             )
         else:
@@ -139,6 +141,7 @@ class CodingTool:
         task_event.metadata["main_goal"] = event.content
 
         self.running_time = time.time()
+        self.running_count = 0
 
         await self.receive_result(task_event, first_time=True)
 

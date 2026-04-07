@@ -26,11 +26,16 @@ class ChatMemory:
         self.memory_file = os.path.join(self.memory_dir, 'memory_chat.json')
         os.makedirs(self.memory_dir, exist_ok=True)
 
+        prompts_dir = os.getenv("PROMPT_PATH", "agent/prompts")
+        prompt_path = os.path.join(prompts_dir, "code_memory.txt")
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            self.system_instruction = f.read()
+
         # --- 配置参数 ---
-        self.level1_limit = 10       # Level 1 容量 (原汁原味的 Event)
-        self.consolidate_batch = 10  # 每积累多少条新 Event 触发一次 Level 2 重构
+        self.level1_limit = 5       # Level 1 容量 (原汁原味的 Event)
+        self.consolidate_batch = 5  # 每积累多少条新 Event 触发一次 Level 2 重构
         self.level2_limit = 150       # Level 2 最大保留条数 (Pruning 阈值)
-        self.min_importance = 10     # Level 2 最小重要性阈值，低于此直接删除
+        self.min_importance = 5     # Level 2 最小重要性阈值，低于此直接删除
 
         # --- Level 1: 短期工作记忆 ---
         self.level1_events: deque[Event] = deque(maxlen=self.level1_limit)
@@ -61,7 +66,8 @@ class ChatMemory:
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
         _event = copy.copy(event)
-        _event.content = _event.content + '\n' + self.state.render_state()
+        if _event.type != "task_done":
+            _event.content = _event.content + '\n' + self.state.render_state()
         # 2. 加入 Level 1 (供 ChatContext 实时使用)
         self.level1_events.append(_event)
 
@@ -139,28 +145,6 @@ class ChatMemory:
             # --- 修改开始：拆分 Prompt ---
             
             # A. 系统指令 (System Prompt) - 只有指令和格式
-            system_instruction = """
-            You are the objective memory archivist for a Minecraft Bot. Your task is to consolidate existing memories with new events into a revised, clean list of memories.
-
-            ### INPUT DATA:
-            - **Current Knowledge Base**: A list of existing memories, each with `content`, `importance`, and a relative `time` in seconds since the session started.
-            - **Recent Events**: A log of new events, each with its own relative `time`.
-            
-            ### CORE OBJECTIVES:
-            1. **CHAT**: Retain key user instructions and conversation context.
-            2. **NON-CHAT** (Actions/Logs): Record ONLY factual states with future utility. 
-               - **NO EVALUATIONS**: DO NOT use subjective adjectives (e.g., "excellent", "failed", "smart", "good"). DO NOT interpret capabilities (e.g., never write "Bot showed replaceability"). 
-               - **FACTS ONLY**: Write exactly what happened (e.g., "Crafted a diamond sword", "Found a village at 100,200", "Died by Zombie").
-            3. **MERGE & UPDATE**: Aggressively collapse related events. If a new event updates an old memory, merge them and use the LATEST `time` from the involved events/memories.
-               - Example: Old memory `{"content": "Mined 10 iron ore", "time": 300}` and new event `Mined 5 iron ore at time 350` should merge into `{"content": "Mined 15 iron ore", "time": 350}`.
-            4. **PRUNE**: Discard routine navigation logs or temporary errors unless they indicate a permanent blocker.
-
-            ### FORMAT RULES:
-            - **Style**: Use concise, telegraphic English (Subject-Verb-Object).
-            - **Output**: Return strictly valid JSON with no markdown formatting.
-            - **Structure**: Your output MUST be a JSON object with a single key "memories". The value must be a list of memory objects.
-            - **Memory Object**: Each memory object in the list must contain three keys: `{"content": "string", "importance": 0-100, "time": "int"}`. The `time` must be an integer.
-            """
             
             # B. 用户数据 (User Prompt) - 只有数据
             user_data = f"""
@@ -183,7 +167,7 @@ class ChatMemory:
                     model=self.model_name,
                     messages=[
                         # Gemini 建议将 System Instruction 放在第一条 User 消息中，或者使用专门的参数
-                        {"role": "user", "content": f"SYSTEM: {system_instruction}\n\nDATA: {user_data}"}
+                        {"role": "user", "content": f"SYSTEM: {self.system_instruction}\n\nDATA: {user_data}"}
                     ],
                     response_format={"type": "json_object"} 
                 )
@@ -262,9 +246,15 @@ class ChatMemory:
                 memory_text += f"- {node.content} (Imp: {node.importance}, Time: {node.time})\n"
             # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
             messages.append({"role": "user", "content": memory_text})
-
+        level1_events = self.level1_events.copy()
+        last_id = -1
+        for i in range(len(level1_events)):
+            if level1_events[i].type == "task_done":
+                if last_id != -1:
+                    level1_events[last_id].content = level1_events[last_id].content[-1]
+                last_id = i
         # --- 2. Level 1 事件流 ---
-        for event in self.level1_events:
+        for event in level1_events:
             if event.type == 'bot_chat':
                 messages.append({"role": "assistant", "content": event.content})
             elif event.type == 'user_chat':
@@ -275,7 +265,7 @@ class ChatMemory:
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content}"})
                 
             elif event.type == "task_done":
-                messages.append({"role": "assistant", "content": f"[Mission End] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Mission Log Start ->] {event.content} [<- Mission Log End]"})
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
@@ -290,7 +280,7 @@ class ChatMemory:
         await self.state.wait_for_image()        
 
         # --- 4. 图像内容 ---
-        if include_image and self.state.last_screenshot_front and self.state.last_screenshot_back:
+        if include_image and self.state.last_screenshot_front:
             img_msg_front = {
                 "role": "user", 
                 "content": [
@@ -305,20 +295,6 @@ class ChatMemory:
                 ]
             }
             messages.append(img_msg_front)
-            img_msg_back = {
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": "后方的视野(正后方,yaw 增加 pi,pitch 取相反数):"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_back}",
-                            "detail": "low"
-                        }
-                    }
-                ]
-            }
-            messages.append(img_msg_back)
 
         return messages
 
@@ -405,6 +381,7 @@ class CodeMemory:
                     如果不传，则默认使用全部 level1_events。
         """
         async with self.lock:
+            print("memory refresh begin")
             target_events = list(self.level1_events)
             self.level1_events.clear()
 
@@ -535,7 +512,7 @@ class CodeMemory:
 
         await self.state.wait_for_image()
 
-        if include_image and self.state.last_screenshot_front and self.state.last_screenshot_back:
+        if include_image and self.state.last_screenshot_front:
             img_msg_front = {
                 "role": "user", 
                 "content": [
@@ -550,19 +527,17 @@ class CodeMemory:
                 ]
             }
             messages.append(img_msg_front)
-            img_msg_back = {
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": "后方的视野(正后方,yaw 增加 pi,pitch 取相反数):"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_back}",
-                            "detail": "low"
-                        }
-                    }
-                ]
-            }
-            messages.append(img_msg_back)
+
+        return messages
+    
+    def render_return_llm_context(self) -> List[Dict]:
+        messages = []
+
+        for event in self.level1_events:
+            if event.type == "code_run_request":
+                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
+
+            elif event.type in ["code_run_result", "error"]:
+                messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
 
         return messages
