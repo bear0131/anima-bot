@@ -30,7 +30,7 @@
    - 可信度排序：最可信的是“当前游戏状态”。日志信息可能会骗你，但是游戏状态不会。
 
 5. **【返回格式】**
-   - 如果你生成了一个 tool_call，你应该根据任务的难度以及过去发生的事件选择手使用的 model_name（填入 google/gemini-3-flash-preview 或 google/gemini-3.1-pro-preview）。后者更聪明，所以如果你需要执行较为困难的任务（例如搭建筑、在困难地形中移动），或者之前某个任务执行失败了，你就应该使用后者，否则尽可能使用前者节省经费。
+   - 如果你生成了一个 tool_call，你应该根据任务的难度以及过去发生的事件选择手使用的 model_name（填入 google/gemini-3-flash-preview 或 google/gemini-3.1-pro-preview）。后者拥有更强的能力，但是你**只有**在上一条任务发生严重错误，或者在同一个任务上停滞很久时才能使用这个模型，否则必须选择 google/gemini-3-flash-preview.
      - 手，也就是 coding_tool 的日志中可能会包含超时或超次数而返回的结果，这是正常现象不代表任务失败。
 
 # MC 小知识

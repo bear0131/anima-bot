@@ -66,10 +66,11 @@ class ChatMemory:
         3. 加入缓冲区，如果满则触发 Level 2 重构。
         """
         _event = copy.copy(event)
-        if type(_event.content) == dict:
-            _event.content["state"] = self.state.render_state()
-        elif _event.type != "task_done":
-            _event.content = _event.content + '\n' + self.state.render_state()
+        if _event.type != "task_done":
+            if type(_event.content) == dict:
+                _event.content["state"] = self.state.render_state()
+            else:
+                _event.content = _event.content + '\n' + self.state.render_state()
 
 
         # 2. 加入 Level 1 (供 ChatContext 实时使用)
@@ -238,7 +239,7 @@ class ChatMemory:
             except Exception as e:
                 print(f"❌ Memory consolidation failed: {e}")
 
-    async def render_llm_context(self, include_image=True) -> List[Dict]:
+    async def render_llm_context(self) -> List[Dict]:
 
         messages = []
 
@@ -269,7 +270,10 @@ class ChatMemory:
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content["task_description"]}"})
                 
             elif event.type == "task_done":
-                messages.append({"role": "assistant", "content": f"[Mission Log Start ->] {event.content} [<- Mission Log End]"})
+                if type(event.content) == list:
+                    messages.extend(event.content)
+                else:
+                    messages.append(event.content)
 
         # --- 3. 游戏状态 (原本是 System) ---
         # 转化规则：并入最后一条 User 消息
@@ -284,7 +288,7 @@ class ChatMemory:
         await self.state.wait_for_image()        
 
         # --- 4. 图像内容 ---
-        if include_image and self.state.last_screenshot_front:
+        if self.state.last_screenshot_front:
             img_msg_front = {
                 "role": "user", 
                 "content": [
@@ -299,6 +303,8 @@ class ChatMemory:
                 ]
             }
             messages.append(img_msg_front)
+        else:
+            raise RuntimeError("No image found")
 
         return messages
 
@@ -478,7 +484,7 @@ class CodeMemory:
             except Exception as e:
                 print(f"❌ Memory refresh failed: {e}")
 
-    async def render_llm_context(self, include_image=True) -> List[Dict]:
+    async def render_llm_context(self) -> List[Dict]:
         messages = []
 
         if self.level2_nodes:
@@ -488,36 +494,30 @@ class CodeMemory:
                 memory_text += f"- {node.content} (Imp: {node.importance})\n"
             messages.append({"role": "user", "content": memory_text})
 
-        event_list = deque(maxlen=6)
-
         for event in self.level1_events:
             if event.type == "tool_call":
                 messages.append({"role": "assistant", "content": f"[Mission Start] {event.content["task_description"]}"})
 
             elif event.type == "code_run_request":
-                event_list.append(event)
+                messages.append({
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"},
+                        event.content["image_msg"]
+                    ]
+                })
 
             elif event.type in ["code_run_result", "error"]:
-                event_list.append(event)
-        
-        for event in event_list:
-            if event.type == "code_run_request":
-                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
-
-            elif event.type in ["code_run_result", "error"]:
-                messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Result {event.type.upper()}] {event.content}"})
 
         state_prompt = await self.state.render_state_for_prompt(vision=True)
 
-        if messages and messages[-1]["role"] == "user":
-            messages[-1]["content"] += f"\n{state_prompt}"
-        else:
-            messages.append({"role": "user", "content": state_prompt})
+        messages.append({"role": "assistant", "content": state_prompt})
         
 
         await self.state.wait_for_image()
 
-        if include_image and self.state.last_screenshot_front:
+        if self.state.last_screenshot_front:
             img_msg_front = {
                 "role": "user", 
                 "content": [
@@ -532,6 +532,8 @@ class CodeMemory:
                 ]
             }
             messages.append(img_msg_front)
+        else:
+            raise RuntimeError("No image found")
 
         return messages
     
@@ -540,9 +542,15 @@ class CodeMemory:
 
         for event in self.level1_events:
             if event.type == "code_run_request":
-                messages.append({"role": "assistant", "content": f"[Action Start] {event.content}"})
+                messages.append({
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"},
+                        event.content["image_msg"]
+                    ]
+                })
 
             elif event.type in ["code_run_result", "error"]:
-                messages.append({"role": "user", "content": f"[{event.type.upper()}] {event.content}"})
+                messages.append({"role": "assistant", "content": f"[Result {event.type.upper()}] {event.content}"})
 
         return messages

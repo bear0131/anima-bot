@@ -244,7 +244,7 @@ class TestCodingCapabilityIntegration:
     )
     async def test_render_llm_context_includes_screenshot(self, mock_short_term_memory):
         """测试 render_llm_context 是否包含截图信息"""
-        messages = mock_short_term_memory.render_llm_context(include_image=True)
+        messages = mock_short_term_memory.render_llm_context()
 
         # 验证消息列表不为空
         assert len(messages) > 0

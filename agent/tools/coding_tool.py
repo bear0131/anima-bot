@@ -98,13 +98,14 @@ class CodingTool:
             logger.warning(f"Received result for task_id {event.metadata['task_id']} but current task_id is {self.task_id}, ignoring...")
             return
 
-        code, plan = await self.generate_code(task_description)
+        code, plan, image_msg = await self.generate_code(task_description)
         
         await self.memory.add_event(Event(
             type="code_run_request",
             content={
                 "plan": plan,
-                "code": code
+                "code": code,
+                "image_msg": image_msg
             },
             source="coding_tool",
             metadata={"main_goal": event.metadata["main_goal"]},
@@ -168,8 +169,8 @@ class CodingTool:
         messages = [{"role": "system", "content": system_content}]
         history_messages = await self.memory.render_llm_context()
         messages.extend(history_messages)
-        messages.append({"role": "user", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
-
+        messages.append({"role": "assistant", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
+        image_msg = history_messages[-1]["content"][1]
         
         #print(f"coding_tool messages: ")
         #for mp in history_messages[:-1]:
@@ -219,5 +220,5 @@ class CodingTool:
         print(f"  📜 代码:\n{code}")
         print(f"{'='*60}\n")
 
-        return code, plan
+        return code, plan, image_msg
     

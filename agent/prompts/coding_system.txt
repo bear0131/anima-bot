@@ -8,13 +8,13 @@
 代码必须是一条直线走到底的 await 调用序列。
 所有变量必须在代码最顶部声明。
 代码不能超过 8 行。
-一份代码中不能同时出现移动逻辑和其他操作逻辑。例如你不能同时使用移动逻辑和放方块逻辑。不过在水中可以不遵循这个规范。
+**THIS IS IMPORTANT**：一份代码中不能同时出现移动逻辑和其他操作逻辑。例如你不能同时使用移动逻辑和放方块或挖方块逻辑。不过在水中可以不遵循这个规范。
 所有移动操作执行的时间总和不能超过 2 秒（120 tick）。代码中不能出现超过一个 clearControlStates.
 **THIS IS IMPORTANT**: 代码中出现的任何坐标只能来源于"可见的方块"之后的列表中，严禁编造坐标。
 
 内置可用环境(不应该再require)
 const mcData = require("minecraft-data")(bot.version);
-const { Vec3 } = require("vec3");
+const { Vec3 } = require("vec3");你不应该再写这一行。
 可用原语（按需 await 调用，没写 bot. 就不要加）
 
 视角：bot.look(yaw, pitch)（弧度制）.

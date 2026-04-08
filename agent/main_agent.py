@@ -114,7 +114,7 @@ class MainAgent:
         """
         # 构建初始上下文：system prompt + 历史（不含图片）
         conversation_context = [{"role": "system", "content": self.chat_system_prompt}]
-        history_messages = await memory.render_llm_context(include_image=True)
+        history_messages = await memory.render_llm_context()
         conversation_context.extend(history_messages)
 
         # 检查 last_event (逻辑保持不变)
@@ -129,10 +129,16 @@ class MainAgent:
         retry_delay = 5 # 秒
 
         print(f"main_agent messages: ")
+        #print(conversation_context[1:-1])
         for mp in conversation_context[1:-1]:
-            print(f"role: {mp["role"]}")
-            s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
-            print(f"content: {s}")
+            if type(mp["content"]) == str:
+                print(f"role: {mp["role"]}")
+                s = "\n".join(line for line in mp["content"].splitlines() if '可见的方块' not in line)
+                print(f"content: {s}")
+            else:
+                print(f"role: {mp["role"]}")
+                s = str(mp["content"])[0:100]
+                print(f"task log: {s}")
         print(f"image length: {len(conversation_context[-1]["content"][1]["image_url"]["url"])}")
         for attempt in range(max_retries):
             try:
