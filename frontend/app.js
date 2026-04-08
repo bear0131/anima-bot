@@ -406,8 +406,8 @@ function updateScreenshot(data) {
     const frontImg = document.getElementById('screenshot-front');
     const backImg = document.getElementById('screenshot-back');
 
-    const frontScreenshot = data.last_screenshot_front;
-    const backScreenshot = data.last_screenshot_back;
+    const frontScreenshot = data.screenshots[0];
+    const backScreenshot = data.screenshots[2];
 
     setImageIfPresent(frontImg, frontScreenshot);
     setImageIfPresent(backImg, backScreenshot);

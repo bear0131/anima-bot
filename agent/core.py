@@ -102,7 +102,6 @@ class Agent:
                 self.agent_state.update_mc_state(event.content)
 
             elif event.type == 'task_done':
-                logger.info(f"任务结束：{event.content}")
                 asyncio.create_task(self.main_agent.event_queue.put(event))
 
             elif event.type == 'code_run_request':

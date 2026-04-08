@@ -170,7 +170,7 @@ class CodingTool:
         history_messages = await self.memory.render_llm_context()
         messages.extend(history_messages)
         messages.append({"role": "assistant", "content": f"### 任务\n{task_description}\n\n请生成相应的 JavaScript 代码。"})
-        image_msg = history_messages[-1]["content"][1]
+        image_msg = history_messages[-1]["content"][1:2]
         
         #print(f"coding_tool messages: ")
         #for mp in history_messages[:-1]:
@@ -208,6 +208,7 @@ class CodingTool:
                 await asyncio.sleep(retry_delay)
 
         try:
+            print("coding content: ", remove_think_tags(response.choices[0].message.content))
             result_json = json.loads(remove_think_tags(response.choices[0].message.content))
             code = result_json.get("code", "")
             plan = result_json.get("plan", "")

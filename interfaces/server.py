@@ -134,7 +134,7 @@ async def vision_status():
 
 @app.websocket("/ws/vision")
 async def vision_websocket_endpoint(websocket: WebSocket):
-    """接收 observer-client 的主视角流并写入 agent_state.last_screenshot_front"""
+    """接收 observer-client 的多视角流并写入 agent_state.screenshots"""
     await websocket.accept()
     vision_connection_status["connected"] = True
     vision_connection_status["last_connected"] = datetime.now().isoformat()
@@ -150,12 +150,16 @@ async def vision_websocket_endpoint(websocket: WebSocket):
                 vision_connection_status["state"] = content.get("state")
                 vision_connection_status["camera_bound"] = content.get("camera_bound")
 
-            elif packet_type == "vision_frame":
-                jpeg_base64 = content.get("jpeg_base64")
-                if jpeg_base64:
+            # 修改点：匹配 Java 传过来的新类型 vision_frame_batch
+            elif packet_type == "vision_frame_batch":
+                frames_data = content.get("frames", [])  # 获取图片数组
+                if frames_data:
                     state = get_agent_state()
                     if state is not None:
-                        state.last_screenshot_front = jpeg_base64
+                        # 提取数组中每个元素的 jpeg_base64 字段，组成一个字符串列表
+                        # 格式：["base64_img1", "base64_img2", "base64_img3"]
+                        state.screenshots = [f.get("jpeg_base64") for f in frames_data if f.get("jpeg_base64")]
+                            
                         state.timestamp_screenshot = datetime.now()
 
                 vision_connection_status["last_frame"] = datetime.now().isoformat()
@@ -165,6 +169,8 @@ async def vision_websocket_endpoint(websocket: WebSocket):
         vision_connection_status["connected"] = False
         vision_connection_status["state"] = None
         vision_connection_status["camera_bound"] = None
+    except Exception as e:
+        print(f"[Server] Error in vision websocket: {e}")
 
 
 @app.websocket("/ws/logs")
@@ -223,20 +229,8 @@ async def get_agent_status():
         "vision_connected": vision_connection_status["connected"],
         "status": state.status if state else "IDLE",
         "mc_state": state.mc_state if state else None,
-        "last_screenshot_front": state.last_screenshot_front if state else None
+        "screenshots": state.screenshots if state else None
     }
-
-
-@app.get("/api/screenshot")
-async def get_screenshot():
-    """获取最新截图"""
-    state = get_agent_state()
-    if state is None:
-        return JSONResponse({"error": "Agent not initialized"}, status_code=503)
-    return {
-        "screenshot_front": state.last_screenshot_front
-    }
-
 
 @app.post("/api/command")
 async def send_command(command: CommandRequest):

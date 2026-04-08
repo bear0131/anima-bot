@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Any, Dict, Literal
+from typing import Optional, Any, Dict, Literal, List
 from datetime import datetime
 import uuid
 import time
@@ -57,7 +57,7 @@ class AgentState(BaseModel):
     """全局状态黑板"""
     status: str = "IDLE"
     mc_state: Optional[MCState] = None
-    last_screenshot_front: Optional[str] = None
+    screenshots: Optional[List[str]] = None
     timestamp_state: Optional[float] = None
     timestamp_screenshot: Optional[float] = None
     

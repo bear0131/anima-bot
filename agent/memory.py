@@ -251,7 +251,7 @@ class ChatMemory:
                 memory_text += f"- {node.content} (Imp: {node.importance}, Time: {node.time})\n"
             # 转化规则：System 内容并入后续的第一条 User 消息，或标记为 User
             messages.append({"role": "user", "content": memory_text})
-        level1_events = self.level1_events.copy()
+        level1_events = copy.deepcopy(self.level1_events)
         last_id = -1
         for i in range(len(level1_events)):
             if level1_events[i].type == "task_done":
@@ -288,23 +288,26 @@ class ChatMemory:
         await self.state.wait_for_image()        
 
         # --- 4. 图像内容 ---
-        if self.state.last_screenshot_front:
-            img_msg_front = {
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": "前方的视野:"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_front}",
-                            "detail": "low"
-                        }
+        if self.state.screenshots and len(self.state.screenshots) > 0:
+            content_list = [{"type": "text", "text": f"视觉信息，分别是你的第一人称视角，第二人称视角和第三人称视角:"}]
+            
+            
+            for b64_data in self.state.screenshots:
+                content_list.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64_data}",
+                        "detail": "low"
                     }
-                ]
+                })
+
+            img_msg = {
+                "role": "user",
+                "content": content_list
             }
-            messages.append(img_msg_front)
+            messages.append(img_msg)
         else:
-            raise RuntimeError("No image found")
+            raise RuntimeError("No images found in state.screenshots")
 
         return messages
 
@@ -502,9 +505,8 @@ class CodeMemory:
                 messages.append({
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"},
-                        event.content["image_msg"]
-                    ]
+                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"}
+                    ] + event.content["image_msg"]
                 })
 
             elif event.type in ["code_run_result", "error"]:
@@ -517,23 +519,25 @@ class CodeMemory:
 
         await self.state.wait_for_image()
 
-        if self.state.last_screenshot_front:
-            img_msg_front = {
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": "前方的视野:"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{self.state.last_screenshot_front}",
-                            "detail": "low"
-                        }
+        if self.state.screenshots and len(self.state.screenshots) > 0:
+            content_list = [{"type": "text", "text": f"视觉信息，分别是你的第一人称视角，第二人称视角和第三人称视角:"}]
+            
+            for b64_data in self.state.screenshots:
+                content_list.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64_data}",
+                        "detail": "low"
                     }
-                ]
+                })
+
+            img_msg = {
+                "role": "user",
+                "content": content_list
             }
-            messages.append(img_msg_front)
+            messages.append(img_msg)
         else:
-            raise RuntimeError("No image found")
+            raise RuntimeError("No images found in state.screenshots")
 
         return messages
     
@@ -545,9 +549,8 @@ class CodeMemory:
                 messages.append({
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"},
-                        event.content["image_msg"]
-                    ]
+                        {"type": "text", "text": f"[Code run request]\nplan: {event.content["plan"]}\ncode: {event.content["code"]}"}
+                    ] + event.content["image_msg"]
                 })
 
             elif event.type in ["code_run_result", "error"]:
