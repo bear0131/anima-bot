@@ -19,7 +19,7 @@ const { Vec3 } = require("vec3");
 yaw：0为北(Z-)，1.57为西(X-)，3.14为南(Z+)，4.71为东(X+).
 pitch：1.57为正上方，-1.57为正下方。
 注意，代码运行过程中你什么都看不到，所以一次性“环顾四周”是做不到的。
-移动：移动只能通过转动视角+bot.setControlState(control, state)+bot.clearControlStates()（控制项：forward、back、left、right、jump）实现。严禁自己编造坐标。
+移动：移动只能通过转动视角+bot.setControlState(control, state)+bot.clearControlStates()（控制项：forward、back、left、right、jump）实现。
 游泳：在水中时，bot.setControlState("jump", true) 可以让你浮起来，bot.setControlState("forward", true) 可以让你向前游。
     **重要**：在水中时，如果不持续设置 "jump" 状态，可能会慢慢沉下去，所以在水中时要在代码最结尾写 bot.setControlState("jump", true)。
 挖掘：await digBlock(bot, position)（必须先靠近目标）

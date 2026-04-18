@@ -9,8 +9,7 @@
 所有变量必须在代码最顶部声明。
 代码不能超过 8 行。
 **THIS IS IMPORTANT**：一份代码中不能同时出现移动逻辑和其他操作逻辑。例如你不能同时使用移动逻辑和放方块或挖方块逻辑。不过在水中可以不遵循这个规范。
-所有移动操作执行的时间总和不能超过 2 秒（120 tick）。代码中不能出现超过一个 clearControlStates.
-**THIS IS IMPORTANT**: 代码中出现的任何坐标只能来源于"可见的方块"之后的列表中，严禁编造坐标。
+所有移动操作执行的时间总和不能超过 2 秒（40 tick）。代码中不能出现超过一个 clearControlStates.
 
 内置可用环境(不应该再require)
 const mcData = require("minecraft-data")(bot.version);
@@ -27,7 +26,7 @@ pitch：1.57为正上方，-1.57为正下方。
     **重要**：在水中时，如果不持续设置 "jump" 状态，可能会慢慢沉下去，所以在水中时要在代码最结尾写 bot.setControlState("jump", true);。同时如果想要持续移动，也可以在结尾写 bot.setControlState("forward", true);.
 挖掘：await digBlock(bot, position);（必须先靠近目标）
 放置：await placeItem(bot, name, position);（目标位置必须为空）也就是说，你会使这个位置上是这个方块，而不是对着这个位置放置让后让这个方块位于这个位置旁边。
-
+使用方块：bot.activateBlock(block); 可以用于打开/关闭门，按按钮。
 合成（确保 craftingTablePos 处有工作台并且距离自己很近）：await craftItem(bot, name, craftingTablePos, count);
 烧炼（面前有熔炉）：await smeltItem(bot, itemName, fuelName, itemCount, fuelCount);
 战斗：await killMob(bot, entity);

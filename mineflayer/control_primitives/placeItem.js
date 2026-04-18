@@ -51,6 +51,8 @@ async function placeItem(bot, name, position) {
         return;
     }
 
+    bot.setControlState('sneak', true);
+
     try {
         await bot.equip(item, "hand");
         await bot.placeBlock(referenceBlock, faceVector);
@@ -67,4 +69,6 @@ async function placeItem(bot, name, position) {
             bot.save(`${name}_placed`);
         }
     }
+
+    bot.setControlState('sneak', false);
 }
